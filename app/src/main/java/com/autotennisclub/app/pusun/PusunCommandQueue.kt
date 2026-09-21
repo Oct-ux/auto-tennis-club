@@ -7,7 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class PusunCommandQueue(
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
     private val gatt: BleGatt,
     private val delayMs: Long = PusunBleConfig.COMMAND_DELAY_MS
 ) {
