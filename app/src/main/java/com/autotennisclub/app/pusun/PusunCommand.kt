@@ -12,7 +12,4 @@ sealed interface PusunCommand {
 }
 
 enum class SpinType(val protocolValue: Int) { NONE(0), TOPSPIN(1), BACKSPIN(2) }
-
-enum class StartMode(val protocolValue: Int) {
-    FIXED(1), HORIZONTAL(2), VERTICAL(3), RANDOM(4), PROGRAM(5)
-}
+enum class StartMode(val protocolValue: Int) { FIXED(1), HORIZONTAL(2), VERTICAL(3), RANDOM(4), PROGRAM(5) }
