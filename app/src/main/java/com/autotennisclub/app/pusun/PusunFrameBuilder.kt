@@ -12,7 +12,7 @@ object PusunFrameBuilder {
         is PusunCommand.SetPoint -> listOf(frame(command.point, u16(command.lr), u16(command.ud)))
         is PusunCommand.ProgramPoints -> buildProgram(command.points)
         is PusunCommand.Start -> listOf(frame(0x6A, byte(command.mode.protocolValue)))
-        PusunCommand.Stop -> listOf(frame(0x6B, 0x00))
+        PusunCommand.Stop -> listOf(frame(0x6B, byte(0)))
     }
 
     private fun buildProgram(points: List<Int>): List<ByteArray> {
