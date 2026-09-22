@@ -13,14 +13,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class MachineController(scope: CoroutineScope, gatt: BleGatt) {
+class MachineController(scope: CoroutineScope, gatt: BleGatt) : TennisMachine {
     private val queue = PusunCommandQueue(scope, gatt)
     private val _state = MutableStateFlow<MachineState>(MachineState.Disconnected)
-    val state: StateFlow<MachineState> = _state.asStateFlow()
+    override val state: StateFlow<MachineState> = _state.asStateFlow()
 
     fun connected() { _state.value = MachineState.Connected }
 
-    suspend fun configure(velocity: Int, frequencyGrade: Int, spin: SpinType = SpinType.NONE, spinValue: Int = 0) {
+    override suspend fun configure(
+        velocity: Int,
+        frequencyGrade: Int,
+        spin: SpinType,
+        spinValue: Int
+    ) {
         _state.value = MachineState.Configuring
         queue.enqueue(PusunCommand.SetVelocity(velocity))
         queue.enqueue(PusunCommand.SetFrequencyGrade(frequencyGrade))
@@ -28,12 +33,12 @@ class MachineController(scope: CoroutineScope, gatt: BleGatt) {
         _state.value = MachineState.Ready
     }
 
-    suspend fun start(mode: StartMode) {
+    override suspend fun start(mode: StartMode) {
         queue.enqueue(PusunCommand.Start(mode))
         _state.value = MachineState.Running
     }
 
-    suspend fun stop() {
+    override suspend fun stop() {
         queue.enqueue(PusunCommand.Stop)
         _state.value = MachineState.Ready
     }
