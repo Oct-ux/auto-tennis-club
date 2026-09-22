@@ -15,6 +15,7 @@ class BleScanner(private val adapter: BluetoothAdapter) {
     @SuppressLint("MissingPermission")
     fun start(onDevice: (BluetoothDevice) -> Unit) {
         stop()
+        val bleScanner = scanner ?: return
         val filters = listOf(
             android.bluetooth.le.ScanFilter.Builder()
                 .setServiceUuid(
@@ -27,7 +28,7 @@ class BleScanner(private val adapter: BluetoothAdapter) {
                 onDevice(result.device)
             }
         }
-        scanner.startScan(
+        bleScanner.startScan(
             filters,
             ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -38,7 +39,11 @@ class BleScanner(private val adapter: BluetoothAdapter) {
 
     @SuppressLint("MissingPermission")
     fun stop() {
-        callback?.let { scanner.stopScan(it) }
+        val bleScanner = scanner ?: run {
+            callback = null
+            return
+        }
+        callback?.let { bleScanner.stopScan(it) }
         callback = null
     }
 }
