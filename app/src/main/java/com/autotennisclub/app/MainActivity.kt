@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -209,7 +210,7 @@ private fun CompleteScreen(onFinish: () -> Unit, modifier: Modifier) {
 }
 
 @Composable
-private fun Centered(modifier: Modifier, content: @Composable () -> Unit) {
+private fun Centered(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = modifier.padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
