@@ -23,6 +23,7 @@ class SessionController(
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
     private var countdownJob: Job? = null
+    private var activeMinutes: Int = 0
 
     init {
         scope.launch {
@@ -61,6 +62,7 @@ class SessionController(
         mode: StartMode = StartMode.FIXED
     ) {
         val selected = _state.value as? SessionState.Selected ?: return
+        activeMinutes = selected.minutes
         countdownJob?.cancel()
         countdownJob = scope.launch {
             _state.value = SessionState.Preparing
@@ -75,7 +77,7 @@ class SessionController(
             timer.start(selected.minutes) {
                 scope.launch {
                     machine.stop()
-                    _state.value = SessionState.Complete
+                    _state.value = SessionState.Complete(activeMinutes)
                 }
             }
             _state.value = SessionState.Running(selected.minutes * 60L)
@@ -88,7 +90,7 @@ class SessionController(
         timer.stop()
         scope.launch {
             machine.stop()
-            _state.value = SessionState.Complete
+            _state.value = SessionState.Complete(activeMinutes)
         }
     }
 

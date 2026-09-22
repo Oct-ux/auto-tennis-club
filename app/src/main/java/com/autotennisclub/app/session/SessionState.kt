@@ -6,5 +6,5 @@ sealed interface SessionState {
     data object Preparing : SessionState
     data class Countdown(val seconds: Int) : SessionState
     data class Running(val remainingSeconds: Long) : SessionState
-    data object Complete : SessionState
+    data class Complete(val minutes: Int) : SessionState
 }
