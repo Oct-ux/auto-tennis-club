@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,14 +19,16 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autotennisclub.app.machine.MockPusunMachine
 import com.autotennisclub.app.session.SessionController
 import com.autotennisclub.app.session.SessionState
@@ -37,11 +38,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            AutoTennisClubTheme {
-                AutoTennisClubApp()
-            }
-        }
+        setContent { AutoTennisClubTheme { AutoTennisClubApp() } }
     }
 }
 
@@ -50,7 +47,8 @@ fun AutoTennisClubApp() {
     val scope = rememberCoroutineScope()
     val machine = remember { MockPusunMachine(scope) }
     val session = remember { SessionController(scope, machine) }
-    val sessionState by session.state.collectAsStateWithLifecycle()
+    val sessionState by session.state.collectAsState()
+    var showTrainingChoice by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -62,14 +60,22 @@ fun AutoTennisClubApp() {
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         SessionUi(
             state = sessionState,
-            onStart = { session.reset() },
-            onDuration = session::selectDuration,
+            showTrainingChoice = showTrainingChoice,
+            onStart = {
+                session.reset()
+                showTrainingChoice = true
+            },
+            onDuration = { minutes ->
+                session.selectDuration(minutes)
+                showTrainingChoice = false
+            },
             onContinue = session::startSelected,
             onStop = session::stopSession,
-            onFinish = session::reset,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            onFinish = {
+                session.reset()
+                showTrainingChoice = false
+            },
+            modifier = Modifier.fillMaxSize().padding(padding)
         )
     }
 }
@@ -77,6 +83,7 @@ fun AutoTennisClubApp() {
 @Composable
 private fun SessionUi(
     state: SessionState,
+    showTrainingChoice: Boolean,
     onStart: () -> Unit,
     onDuration: (Int) -> Unit,
     onContinue: () -> Unit,
@@ -84,13 +91,21 @@ private fun SessionUi(
     onFinish: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    when (state) {
-        SessionState.Idle -> HomeScreen(onStart, modifier)
-        is SessionState.Selected -> DurationSelectedScreen(state.minutes, onContinue, modifier)
-        SessionState.Preparing -> PreparingScreen(modifier)
-        is SessionState.Countdown -> CountdownScreen(state.seconds, modifier)
-        is SessionState.Running -> TrainingScreen(state.remainingSeconds, onStop, modifier)
-        SessionState.Complete -> CompleteScreen(onFinish, modifier)
+    when {
+        state is SessionState.Idle && showTrainingChoice ->
+            DurationChoiceScreen(onDuration, modifier)
+        state is SessionState.Idle ->
+            HomeScreen(onStart, modifier)
+        state is SessionState.Selected ->
+            DurationSelectedScreen(state.minutes, onContinue, modifier)
+        state is SessionState.Preparing ->
+            PreparingScreen(modifier)
+        state is SessionState.Countdown ->
+            CountdownScreen(state.seconds, modifier)
+        state is SessionState.Running ->
+            TrainingScreen(state.remainingSeconds, onStop, modifier)
+        state is SessionState.Complete ->
+            CompleteScreen(onFinish, modifier)
     }
 }
 
@@ -110,27 +125,31 @@ private fun HomeScreen(onStart: () -> Unit, modifier: Modifier) {
 }
 
 @Composable
-private fun DurationSelectedScreen(
-    minutes: Int,
-    onContinue: () -> Unit,
-    modifier: Modifier
-) {
+private fun DurationChoiceScreen(onDuration: (Int) -> Unit, modifier: Modifier) {
     Centered(modifier) {
         Text("CHOOSE DURATION", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(15, 30, 60).forEach { option ->
-                OutlinedButton(onClick = { /* selection handled below by parent in next iteration */ }) {
-                    Text("$option MIN")
-                }
+        listOf(15, 30, 60).forEach { minutes ->
+            Button(
+                onClick = { onDuration(minutes) },
+                modifier = Modifier.fillMaxWidth(0.75f).height(64.dp).padding(bottom = 8.dp)
+            ) {
+                Text("$minutes MIN")
             }
         }
-        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun DurationSelectedScreen(minutes: Int, onContinue: () -> Unit, modifier: Modifier) {
+    Centered(modifier) {
+        Text("SESSION SUMMARY", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(24.dp))
         Card(Modifier.fillMaxWidth(0.75f)) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("$minutes MIN", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(16.dp))
-                Text("Selected training duration")
+                Text("BASIC", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text("$minutes MIN")
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -159,11 +178,7 @@ private fun CountdownScreen(seconds: Int, modifier: Modifier) {
 }
 
 @Composable
-private fun TrainingScreen(
-    remainingSeconds: Long,
-    onStop: () -> Unit,
-    modifier: Modifier
-) {
+private fun TrainingScreen(remainingSeconds: Long, onStop: () -> Unit, modifier: Modifier) {
     val minutes = remainingSeconds / 60
     val seconds = remainingSeconds % 60
     Centered(modifier) {
