@@ -22,8 +22,10 @@ class SessionController(
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    private var countdownJob: Job? = null
+    private var sessionJob: Job? = null
+    private var paymentJob: Job? = null
     private var activeMinutes: Int = 0
+    private var activeMode: TrainingMode = TrainingMode.BASIC
 
     init {
         scope.launch {
@@ -32,7 +34,8 @@ class SessionController(
                     _state.value !is SessionState.Complete
                 ) {
                     timer.stop()
-                    countdownJob?.cancel()
+                    sessionJob?.cancel()
+                    paymentJob?.cancel()
                     _state.value = SessionState.Idle
                 }
             }
@@ -40,69 +43,162 @@ class SessionController(
 
         scope.launch {
             timer.remainingSeconds.collectLatest { remaining ->
-                if (_state.value is SessionState.Running) {
-                    _state.value = SessionState.Running(remaining)
+                val current = _state.value
+                if (current is SessionState.Running) {
+                    _state.value = current.copy(remainingSeconds = remaining)
                 }
             }
         }
     }
 
+    fun start() {
+        reset()
+        _state.value = SessionState.TrainingSelection
+    }
+
+    fun selectTraining(mode: TrainingMode) {
+        _state.value = SessionState.DurationSelection(mode)
+    }
+
     fun selectDuration(minutes: Int) {
         require(minutes in setOf(15, 30, 60)) { "Unsupported MVP duration: $minutes" }
-        if (_state.value is SessionState.Idle || _state.value is SessionState.Selected) {
-            _state.value = SessionState.Selected(minutes)
+        val current = _state.value as? SessionState.DurationSelection ?: return
+        if (current.mode == TrainingMode.CUSTOM) {
+            _state.value = SessionState.CustomConfigState(minutes)
+        } else {
+            _state.value = SessionState.Summary(
+                mode = current.mode,
+                minutes = minutes,
+                price = priceFor(minutes)
+            )
         }
     }
 
-    fun startSelected(
-        velocity: Int = 80,
-        frequencyGrade: Int = 30,
-        spin: SpinType = SpinType.TOPSPIN,
-        spinValue: Int = 10,
-        mode: StartMode = StartMode.FIXED
-    ) {
-        val selected = _state.value as? SessionState.Selected ?: return
-        activeMinutes = selected.minutes
-        countdownJob?.cancel()
-        countdownJob = scope.launch {
+    fun updateCustomConfig(config: CustomConfig) {
+        val current = _state.value as? SessionState.CustomConfigState ?: return
+        _state.value = current.copy(config = config)
+    }
+
+    fun confirmCustomConfig() {
+        val current = _state.value as? SessionState.CustomConfigState ?: return
+        _state.value = SessionState.Summary(
+            mode = TrainingMode.CUSTOM,
+            minutes = current.minutes,
+            price = priceFor(current.minutes),
+            config = current.config
+        )
+    }
+
+    fun proceedToPayment() {
+        when (val current = _state.value) {
+            is SessionState.Summary -> {
+                _state.value = SessionState.Payment(
+                    mode = current.mode,
+                    minutes = current.minutes,
+                    price = current.price,
+                    config = current.config
+                )
+            }
+            else -> Unit
+        }
+    }
+
+    fun simulatePayment() {
+        val current = _state.value as? SessionState.Payment ?: return
+        if (current.status != PaymentStatus.WAITING) return
+
+        _state.value = current.copy(status = PaymentStatus.PROCESSING)
+        paymentJob?.cancel()
+        paymentJob = scope.launch {
+            delay(900)
+            val latest = _state.value as? SessionState.Payment ?: return@launch
+            _state.value = latest.copy(status = PaymentStatus.SUCCESS)
+        }
+    }
+
+    fun simulatePaymentFailure() {
+        val current = _state.value as? SessionState.Payment ?: return
+        _state.value = current.copy(status = PaymentStatus.FAILED)
+    }
+
+    fun retryPayment() {
+        val current = _state.value as? SessionState.Payment ?: return
+        _state.value = current.copy(status = PaymentStatus.WAITING)
+    }
+
+    fun startPaidSession() {
+        val payment = _state.value as? SessionState.Payment ?: return
+        if (payment.status != PaymentStatus.SUCCESS) return
+        activeMinutes = payment.minutes
+        activeMode = payment.mode
+
+        sessionJob?.cancel()
+        sessionJob = scope.launch {
             _state.value = SessionState.Preparing
-            machine.configure(velocity, frequencyGrade, spin, spinValue)
+
+            val config = payment.config ?: CustomConfig()
+            val spin = when (config.spin) {
+                "BACKSPIN" -> SpinType.BACKSPIN
+                "NO SPIN" -> SpinType.NONE
+                else -> SpinType.TOPSPIN
+            }
+            machine.configure(
+                velocity = config.velocity,
+                frequencyGrade = config.frequencyGrade,
+                spin = spin,
+                spinValue = config.spinValue
+            )
 
             for (second in countdownSeconds downTo 1) {
                 _state.value = SessionState.Countdown(second)
                 delay(1000)
             }
 
-            machine.start(mode)
-            timer.start(selected.minutes) {
+            val startMode = when (payment.mode) {
+                TrainingMode.BASIC -> StartMode.FIXED
+                TrainingMode.TRAINING -> StartMode.PROGRAM
+                TrainingMode.CUSTOM -> StartMode.PROGRAM
+            }
+            machine.start(startMode)
+            timer.start(payment.minutes) {
                 scope.launch {
                     machine.stop()
-                    _state.value = SessionState.Complete(activeMinutes)
+                    _state.value = SessionState.Complete(activeMinutes, activeMode)
                 }
             }
-            _state.value = SessionState.Running(selected.minutes * 60L)
+            _state.value = SessionState.Running(payment.minutes * 60L, payment.mode)
         }
     }
 
     fun stopSession() {
-        countdownJob?.cancel()
-        countdownJob = null
+        sessionJob?.cancel()
+        sessionJob = null
         timer.stop()
         scope.launch {
             machine.stop()
-            _state.value = SessionState.Complete(activeMinutes)
+            _state.value = SessionState.Complete(activeMinutes, activeMode)
         }
     }
 
     fun reset() {
-        countdownJob?.cancel()
-        countdownJob = null
+        sessionJob?.cancel()
+        sessionJob = null
+        paymentJob?.cancel()
+        paymentJob = null
         timer.stop()
         _state.value = SessionState.Idle
     }
 
     fun dispose() {
-        countdownJob?.cancel()
+        sessionJob?.cancel()
+        paymentJob?.cancel()
         timer.stop()
+    }
+
+    private fun priceFor(minutes: Int): Double = when (minutes) {
+        15 -> 6.90
+        30 -> 12.00
+        60 -> 20.00
+        else -> error("Unsupported duration")
     }
 }
