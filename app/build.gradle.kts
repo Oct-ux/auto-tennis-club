@@ -12,6 +12,16 @@ val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
+// Release signing key, also never committed: keystore.properties next to local.properties
+//   storeFile=D:/AutoTennisClub/keys/autotennisclub-release.jks
+//   storePassword=...
+//   keyAlias=autotennisclub
+//   keyPassword=...
+// Kiosk tablets only accept updates signed with this same key: keep two backups.
+val keystoreProperties = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 android {
     namespace = "com.autotennisclub.app"
     compileSdk {
@@ -34,11 +44,43 @@ android {
         buildConfigField("String", "SUPPORT_CONTACT", "\"${localProperties.getProperty("support.contact", "")}\"")
     }
 
+    signingConfigs {
+        if (!keystoreProperties.isEmpty) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
+            if (signingConfig == null) {
+                logger.warn("keystore.properties missing: release APKs will be unsigned and cannot be installed")
+            }
             optimization {
                 enable = false
             }
+        }
+    }
+
+    flavorDimensions += "station"
+    productFlavors {
+        // Simulated MAX B and card terminal: development, QA and sales demos. Installs next
+        // to the real app and shows a DEMO label, so it can never pass for a real station.
+        create("demo") {
+            dimension = "station"
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+            buildConfigField("boolean", "SIMULATED", "true")
+        }
+        // Real MAX B over BLE; payments stay disabled until SumUp is integrated (phase 6).
+        create("production") {
+            dimension = "station"
+            buildConfigField("boolean", "SIMULATED", "false")
         }
     }
 

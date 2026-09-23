@@ -86,4 +86,26 @@
     <string name="recovery_payment">Pago</string>
     <string name="recovery_machine">Máquina</string>
     <string name="recovery_timer">Tiempo</string>
+
+    <!-- Navigation, cancel modal, custom configuration details -->
+    <string name="back">← VOLVER</string>
+    <string name="cancel_session">← CANCELAR SESIÓN</string>
+    <string name="cancel_title">¿Cancelar la sesión?</string>
+    <string name="cancel_body">Esta sesión ya está pagada y NO se reembolsará. ¿Seguro que quieres cancelarla?</string>
+    <string name="keep_playing">SEGUIR JUGANDO</string>
+    <string name="confirm_cancel">SÍ, CANCELAR (SIN REEMBOLSO)</string>
+    <string name="landing_zone">ZONA DE BOTE • toca para elegir</string>
+    <string name="zone_net_left">RED IZQUIERDA</string>
+    <string name="zone_net_right">RED DERECHA</string>
+    <string name="zone_back_left">FONDO IZQUIERDA</string>
+    <string name="zone_back_right">FONDO DERECHA</string>
+    <string name="speed_slow">Lenta</string>
+    <string name="speed_fast">Rápida</string>
+    <string name="frequency_detail">tiempo entre pelotas</string>
+    <string name="frequency_fast">Ritmo rápido</string>
+    <string name="frequency_relaxed">Tranquilo</string>
+    <string name="intensity">INTENSIDAD</string>
+    <string name="intensity_light">SUAVE</string>
+    <string name="intensity_medium">MEDIA</string>
+    <string name="intensity_heavy">FUERTE</string>
 </resources>

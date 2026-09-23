@@ -86,4 +86,26 @@
     <string name="recovery_payment">Pagament</string>
     <string name="recovery_machine">Màquina</string>
     <string name="recovery_timer">Temps</string>
+
+    <!-- Navigation, cancel modal, custom configuration details -->
+    <string name="back">← TORNAR</string>
+    <string name="cancel_session">← CANCEL·LAR SESSIÓ</string>
+    <string name="cancel_title">Vols cancel·lar la sessió?</string>
+    <string name="cancel_body">Aquesta sessió ja està pagada i NO es reemborsarà. Segur que la vols cancel·lar?</string>
+    <string name="keep_playing">CONTINUAR JUGANT</string>
+    <string name="confirm_cancel">SÍ, CANCEL·LAR (SENSE REEMBORSAMENT)</string>
+    <string name="landing_zone">ZONA DE BOT • toca per triar</string>
+    <string name="zone_net_left">XARXA ESQUERRA</string>
+    <string name="zone_net_right">XARXA DRETA</string>
+    <string name="zone_back_left">FONS ESQUERRA</string>
+    <string name="zone_back_right">FONS DRETA</string>
+    <string name="speed_slow">Lenta</string>
+    <string name="speed_fast">Ràpida</string>
+    <string name="frequency_detail">temps entre pilotes</string>
+    <string name="frequency_fast">Ritme ràpid</string>
+    <string name="frequency_relaxed">Tranquil</string>
+    <string name="intensity">INTENSITAT</string>
+    <string name="intensity_light">SUAU</string>
+    <string name="intensity_medium">MITJANA</string>
+    <string name="intensity_heavy">FORTA</string>
 </resources>

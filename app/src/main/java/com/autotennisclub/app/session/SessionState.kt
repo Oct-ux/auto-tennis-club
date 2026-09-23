@@ -55,13 +55,19 @@ enum class MachineTest {
     SPIN
 }
 
+/** Figma 04 court grid. */
+enum class LandingZone { NET_LEFT, NET_RIGHT, BACK_LEFT, BACK_RIGHT }
+
+/** Spin strength; PUSUN spin values to be tuned on the MAX B. */
+enum class SpinIntensity(val spinValue: Int) { LIGHT(5), MEDIUM(10), HEAVY(15) }
+
 data class CustomConfig(
     val velocity: Int = 80,
     val frequencyGrade: Int = 30,
     val spin: String = "TOPSPIN",
-    val spinValue: Int = 10,
-    val sequence: String = "ROTATE POINTS",
-    val landingZones: Int = 4
+    val intensity: SpinIntensity = SpinIntensity.MEDIUM,
+    val sequence: String = ROTATE_POINTS,
+    val zones: Set<LandingZone> = LandingZone.entries.toSet()
 ) {
     val spinType: SpinType
         get() = when (spin) {
@@ -69,6 +75,25 @@ data class CustomConfig(
             "NONE", "NO SPIN" -> SpinType.NONE
             else -> SpinType.TOPSPIN
         }
+
+    val spinValue: Int get() = if (spinType == SpinType.NONE) 0 else intensity.spinValue
+
+    val fixedPoint: Boolean get() = sequence == FIXED_POINT
+
+    /** FIXED POINT plays one zone, so a tap replaces it; ROTATE POINTS toggles zones in and out. */
+    fun toggle(zone: LandingZone): CustomConfig =
+        if (fixedPoint) copy(zones = setOf(zone))
+        else copy(zones = if (zone in zones) zones - zone else zones + zone)
+
+    fun withSequence(sequence: String): CustomConfig = copy(
+        sequence = sequence,
+        zones = if (sequence == FIXED_POINT) zones.take(1).toSet() else zones
+    )
+
+    companion object {
+        const val FIXED_POINT = "FIXED POINT"
+        const val ROTATE_POINTS = "ROTATE POINTS"
+    }
 }
 
 /** Session-side facts for the operator panel. */

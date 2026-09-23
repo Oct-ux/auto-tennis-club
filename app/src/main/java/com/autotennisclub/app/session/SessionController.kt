@@ -125,8 +125,31 @@ class SessionController(
         _state.value = current.copy(config = config)
     }
 
+    /** ← BACK on screens 02–06. Never once the terminal is charging. */
+    fun back() {
+        _state.value = when (val current = _state.value) {
+            SessionState.TrainingSelection -> SessionState.Idle
+            is SessionState.DurationSelection -> SessionState.TrainingSelection
+            is SessionState.CustomConfigState -> SessionState.DurationSelection(TrainingMode.CUSTOM)
+            is SessionState.Summary ->
+                if (current.mode == TrainingMode.CUSTOM) {
+                    SessionState.CustomConfigState(current.minutes, current.config ?: CustomConfig())
+                } else {
+                    SessionState.DurationSelection(current.mode)
+                }
+            is SessionState.Payment ->
+                if (current.status == PaymentState.WAITING || current.status.canRetry) {
+                    SessionState.Summary(current.mode, current.minutes, current.price, current.config)
+                } else {
+                    return
+                }
+            else -> return
+        }
+    }
+
     fun confirmCustomConfig() {
         val current = _state.value as? SessionState.CustomConfigState ?: return
+        if (current.config.zones.isEmpty()) return
         _state.value = SessionState.Summary(
             mode = TrainingMode.CUSTOM,
             minutes = current.minutes,

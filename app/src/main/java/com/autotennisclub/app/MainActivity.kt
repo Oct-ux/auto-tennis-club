@@ -10,6 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,10 +32,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -48,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -55,9 +61,12 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autotennisclub.app.debug.DebugPanel
@@ -66,11 +75,14 @@ import com.autotennisclub.app.kiosk.KioskStatus
 import com.autotennisclub.app.kiosk.bluetoothPermissions
 import com.autotennisclub.app.machine.MachineState
 import com.autotennisclub.app.session.CustomConfig
+import com.autotennisclub.app.pusun.SpinType
 import com.autotennisclub.app.session.ErrorEntry
+import com.autotennisclub.app.session.LandingZone
 import com.autotennisclub.app.session.PaymentState
 import com.autotennisclub.app.session.RecoveryStep
 import com.autotennisclub.app.session.SessionDiagnostics
 import com.autotennisclub.app.session.SessionState
+import com.autotennisclub.app.session.SpinIntensity
 import com.autotennisclub.app.session.TrainingMode
 import com.autotennisclub.app.session.TrainingOverlay
 import com.autotennisclub.app.session.UnavailableReason
@@ -80,6 +92,7 @@ import com.autotennisclub.app.station.StationState
 import com.autotennisclub.app.ui.AppLanguage
 import com.autotennisclub.app.ui.LanguagePicker
 import com.autotennisclub.app.ui.LocalizedContent
+import com.autotennisclub.app.ui.LocalizedDialog
 import com.autotennisclub.app.ui.MaintenanceActions
 import com.autotennisclub.app.ui.MaintenanceScreen
 import com.autotennisclub.app.ui.PinDialog
@@ -88,11 +101,14 @@ import com.autotennisclub.app.ui.StatusScreen
 import com.autotennisclub.app.ui.holdToOpen
 import com.autotennisclub.app.ui.theme.AutoTennisClubTheme
 import com.autotennisclub.app.ui.theme.BorderGray
+import com.autotennisclub.app.ui.theme.ErrorPale
 import com.autotennisclub.app.ui.theme.ErrorRed
 import com.autotennisclub.app.ui.theme.Green
 import com.autotennisclub.app.ui.theme.GreenDark
 import com.autotennisclub.app.ui.theme.GreenPale
+import com.autotennisclub.app.ui.theme.HintGray
 import com.autotennisclub.app.ui.theme.Navy
+import com.autotennisclub.app.ui.theme.Neutral
 import com.autotennisclub.app.ui.theme.TextSecondary
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
@@ -137,6 +153,7 @@ class MainActivity : ComponentActivity() {
 /** Everything the customer screens can do; the defaults keep previews short. */
 data class SessionActions(
     val onStart: () -> Unit = {},
+    val onBack: () -> Unit = {},
     val onLanguage: (AppLanguage) -> Unit = {},
     val onTraining: (TrainingMode) -> Unit = {},
     val onDuration: (Int) -> Unit = {},
@@ -159,8 +176,6 @@ data class SessionActions(
 fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> Unit = {}) {
     val context = LocalContext.current.applicationContext
     val station = remember { (context as StationApp).station }
-    val machine = station.machine
-    val payments = station.payments
     val session = station.session
     val state by station.state.collectAsState()
     var askPin by remember { mutableStateOf(false) }
@@ -202,6 +217,7 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
     val actions = remember(session) {
         SessionActions(
             onStart = session::start,
+            onBack = session::back,
             onLanguage = { language = it },
             onTraining = session::selectTraining,
             onDuration = session::selectDuration,
@@ -228,7 +244,7 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
             onEndSession = session::endSavedSession,
             onAndroidSettings = onAndroidSettings,
             onMachineTest = session::runMachineTest,
-            onSimulateFault = { machine.simulateFault(1) }
+            onSimulateFault = station.simulatedMachine?.let { mock -> { mock.simulateFault(1) } }
         )
     }
 
@@ -253,12 +269,22 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
                 } else {
                     SessionUi(state.session, actions, BuildConfig.SUPPORT_CONTACT, content, language)
                 }
+                if (BuildConfig.SIMULATED) {
+                    // A demo build must never pass for a real station: it plays without charging.
+                    Text(
+                        "DEMO · SIMULATED MACHINE AND PAYMENTS",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ErrorRed,
+                        modifier = Modifier.align(Alignment.TopStart).padding(padding).padding(16.dp)
+                    )
+                }
                 if (BuildConfig.DEBUG) {
                     DebugPanel(
                         state = state.session,
                         session = session,
-                        machine = machine,
-                        payments = payments,
+                        machine = station.simulatedMachine,
+                        payments = station.simulatedPayments,
                         kioskSetUp = state.device.kiosk != KioskStatus.NOT_SET_UP,
                         onRemoveKiosk = onRemoveKiosk,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(padding).padding(16.dp)
@@ -288,6 +314,18 @@ private fun SessionUi(
     modifier: Modifier,
     language: AppLanguage = AppLanguage.DEFAULT
 ) {
+    var confirmCancel by remember { mutableStateOf(false) }
+    val playing = state is SessionState.Preparing || state is SessionState.Countdown || state is SessionState.Running
+    if (confirmCancel && playing) {
+        CancelSessionDialog(
+            onKeepPlaying = { confirmCancel = false },
+            onConfirm = {
+                confirmCancel = false
+                actions.onStop()
+            }
+        )
+    }
+
     val overlay = state.trainingOverlay
     if (overlay != null) {
         TrainingWithOverlay(state, overlay, actions, supportContact, modifier)
@@ -342,11 +380,18 @@ private fun SessionUi(
         )
         SessionState.Maintenance -> Unit
         SessionState.Idle -> HomeScreen(language, actions.onLanguage, actions.onStart, actions.onOperatorAccess, modifier)
-        SessionState.TrainingSelection -> TrainingSelectionScreen(actions.onTraining, modifier)
-        is SessionState.DurationSelection -> DurationSelectionScreen(actions.onDuration, modifier)
-        is SessionState.CustomConfigState ->
-            CustomConfigScreen(state, actions.onCustomConfig, actions.onConfirmCustom, modifier)
-        is SessionState.Summary -> SummaryScreen(state, actions.onPayment, modifier)
+        SessionState.TrainingSelection -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+            TrainingSelectionScreen(actions.onTraining, Modifier.fillMaxSize())
+        }
+        is SessionState.DurationSelection -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+            DurationSelectionScreen(actions.onDuration, Modifier.fillMaxSize())
+        }
+        is SessionState.CustomConfigState -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+            CustomConfigScreen(state, actions.onCustomConfig, actions.onConfirmCustom, Modifier.fillMaxSize())
+        }
+        is SessionState.Summary -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+            SummaryScreen(state, actions.onPayment, Modifier.fillMaxSize())
+        }
         is SessionState.Payment -> when (state.status) {
             PaymentState.VERIFYING -> StatusScreen(
                 icon = "●",
@@ -354,27 +399,40 @@ private fun SessionUi(
                 body = stringResource(R.string.s08_body),
                 modifier = modifier
             )
-            PaymentState.TIMEOUT -> StatusScreen(
-                icon = "!",
-                heading = stringResource(R.string.s06_heading),
-                body = stringResource(R.string.s06_body),
-                action = stringResource(R.string.try_again) to actions.onRetryPayment,
-                modifier = modifier
-            )
-            PaymentState.CANCELLED -> StatusScreen(
-                icon = "!",
-                heading = stringResource(R.string.s07_heading),
-                body = stringResource(R.string.s07_body),
-                action = stringResource(R.string.try_again) to actions.onRetryPayment,
-                modifier = modifier
-            )
+            PaymentState.TIMEOUT -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+                StatusScreen(
+                    icon = "!",
+                    heading = stringResource(R.string.s06_heading),
+                    body = stringResource(R.string.s06_body),
+                    action = stringResource(R.string.try_again) to actions.onRetryPayment,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            PaymentState.CANCELLED -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+                StatusScreen(
+                    icon = "!",
+                    heading = stringResource(R.string.s07_heading),
+                    body = stringResource(R.string.s07_body),
+                    action = stringResource(R.string.try_again) to actions.onRetryPayment,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            PaymentState.WAITING, PaymentState.FAILED -> WithTopAction(stringResource(R.string.back), actions.onBack, modifier) {
+                PaymentScreen(
+                    state, actions.onPay, actions.onRetryPayment, actions.onCancelPayment, actions.onStartPaid,
+                    Modifier.fillMaxSize()
+                )
+            }
             else -> PaymentScreen(
                 state, actions.onPay, actions.onRetryPayment, actions.onCancelPayment, actions.onStartPaid, modifier
             )
         }
         SessionState.Preparing -> PreparingScreen(modifier)
-        is SessionState.Countdown -> CountdownScreen(state.seconds, modifier)
-        is SessionState.Running -> TrainingScreen(state.remainingSeconds, state.mode, actions.onStop, modifier)
+        is SessionState.Countdown ->
+            WithTopAction(stringResource(R.string.cancel_session), { confirmCancel = true }, modifier) {
+                CountdownScreen(state.seconds, Modifier.fillMaxSize())
+            }
+        is SessionState.Running -> TrainingScreen(state.remainingSeconds, state.mode, { confirmCancel = true }, modifier)
         is SessionState.Complete -> CompleteScreen(state.minutes, state.mode, actions.onFinish, modifier)
     }
 }
@@ -441,6 +499,70 @@ private fun recoveryProgress(step: RecoveryStep): String {
     return stringResource(R.string.recovery_payment) + " " + mark(step >= RecoveryStep.PAYMENT_VERIFIED) + "   " +
         stringResource(R.string.recovery_machine) + " " + mark(step >= RecoveryStep.MACHINE_VERIFIED) + "   " +
         stringResource(R.string.recovery_timer) + " " + mark(step >= RecoveryStep.TIMER_VERIFIED)
+}
+
+/** Figma "← BACK" / "← CANCEL SESSION": a text action in the top-right corner. */
+@Composable
+private fun WithTopAction(label: String, onClick: () -> Unit, modifier: Modifier, content: @Composable () -> Unit) {
+    Box(modifier.fillMaxSize()) {
+        content()
+        Text(
+            label,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextSecondary,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 12.dp, end = 20.dp)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 14.dp)
+        )
+    }
+}
+
+/** Figma CANCEL SESSION — CONFIRMATION: a paid session is not refunded. */
+@Composable
+private fun CancelSessionDialog(onKeepPlaying: () -> Unit, onConfirm: () -> Unit) {
+    LocalizedDialog(onDismissRequest = onKeepPlaying) {
+        Card(
+            modifier = Modifier.width(560.dp),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(1.dp, BorderGray)
+        ) {
+            Column(Modifier.padding(32.dp)) {
+                Text(stringResource(R.string.cancel_title), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Navy)
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.cancel_body), fontSize = 16.sp, color = TextSecondary)
+                Spacer(Modifier.height(32.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+                    OutlinedButton(
+                        onClick = onKeepPlaying,
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, BorderGray)
+                    ) {
+                        Text(stringResource(R.string.keep_playing), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Navy)
+                    }
+                    OutlinedButton(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1.3f).height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, ErrorRed),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = ErrorPale)
+                    ) {
+                        Text(
+                            stringResource(R.string.confirm_cancel),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ErrorRed,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -600,39 +722,45 @@ private fun CustomConfigScreen(
 ) {
     val config = state.config
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
+        modifier = modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 48.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(stringResource(R.string.custom_training), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Navy)
-        Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.minutes_short, state.minutes), style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
+        Text(stringResource(R.string.custom_training), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Navy)
         Spacer(Modifier.height(24.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(0.9f),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(1.dp, BorderGray)
-        ) {
-            Column(Modifier.padding(24.dp)) {
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                Text(stringResource(R.string.landing_zone), fontSize = 16.sp, color = TextSecondary)
+                Spacer(Modifier.height(12.dp))
+                LandingZoneGrid(
+                    selected = config.zones,
+                    onToggle = { onConfig(config.toggle(it)) },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
+            }
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
                 ConfigSlider(
                     label = stringResource(R.string.speed),
                     valueLabel = "${config.velocity} km/h",
                     value = config.velocity.toFloat(),
                     range = 40f..120f,
+                    lowLabel = stringResource(R.string.speed_slow),
+                    highLabel = stringResource(R.string.speed_fast),
                     onChange = { onConfig(config.copy(velocity = it.toInt())) }
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
                 ConfigSlider(
-                    label = stringResource(R.string.frequency),
+                    label = stringResource(R.string.frequency) + " • " + stringResource(R.string.frequency_detail),
                     valueLabel = frequencyLabel(config.frequencyGrade),
                     value = config.frequencyGrade.toFloat(),
                     range = 10f..50f,
+                    lowLabel = stringResource(R.string.frequency_fast),
+                    highLabel = stringResource(R.string.frequency_relaxed),
                     onChange = { onConfig(config.copy(frequencyGrade = it.toInt())) }
                 )
-                Spacer(Modifier.height(24.dp))
-                Text(stringResource(R.string.spin), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.spin), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     listOf("NONE", "TOPSPIN", "BACKSPIN").forEach { spin ->
                         OptionPill(
                             label = spinLabel(spin),
@@ -642,32 +770,89 @@ private fun CustomConfigScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(20.dp))
-                Text(stringResource(R.string.sequence_mode), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.intensity), fontSize = 13.sp, color = TextSecondary)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("FIXED POINT", "ROTATE POINTS").forEach { seq ->
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    SpinIntensity.entries.forEach { intensity ->
                         OptionPill(
-                            label = sequenceLabel(seq),
-                            selected = config.sequence == seq,
-                            onClick = { onConfig(config.copy(sequence = seq)) },
+                            label = intensityLabel(intensity),
+                            selected = config.intensity == intensity && config.spinType != SpinType.NONE,
+                            onClick = { onConfig(config.copy(intensity = intensity)) },
+                            enabled = config.spinType != SpinType.NONE,
+                            height = 40.dp,
+                            fontSize = 13.sp,
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    stringResource(R.string.config_not_paid),
-                    fontSize = 13.sp,
-                    color = TextSecondary
-                )
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.sequence_mode), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    listOf(CustomConfig.FIXED_POINT, CustomConfig.ROTATE_POINTS).forEach { sequence ->
+                        OptionPill(
+                            label = sequenceLabel(sequence),
+                            selected = config.sequence == sequence,
+                            onClick = { onConfig(config.withSequence(sequence)) },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onConfirm, modifier = Modifier.width(280.dp).height(70.dp)) {
-            Text(stringResource(R.string.confirm))
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.config_not_paid), fontSize = 15.sp, color = TextSecondary)
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onConfirm,
+            enabled = config.zones.isNotEmpty(),
+            modifier = Modifier.width(280.dp).height(60.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text(stringResource(R.string.confirm), fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** Figma 04: tap a zone to select it (one zone with FIXED POINT, several with ROTATE POINTS). */
+@Composable
+private fun LandingZoneGrid(selected: Set<LandingZone>, onToggle: (LandingZone) -> Unit, modifier: Modifier) {
+    Box(
+        modifier
+            .background(Color.White, RoundedCornerShape(8.dp))
+            .border(1.dp, BorderGray, RoundedCornerShape(8.dp))
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                listOf(LandingZone.NET_LEFT, LandingZone.NET_RIGHT),
+                listOf(LandingZone.BACK_LEFT, LandingZone.BACK_RIGHT)
+            ).forEach { row ->
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { zone ->
+                        val isSelected = zone in selected
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .background(if (isSelected) Green else Color.White, RoundedCornerShape(8.dp))
+                                .border(1.dp, if (isSelected) Green else BorderGray, RoundedCornerShape(8.dp))
+                                .clickable { onToggle(zone) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                zoneLabel(zone),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else Navy
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -677,33 +862,61 @@ private fun ConfigSlider(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    lowLabel: String,
+    highLabel: String,
     onChange: (Float) -> Unit
 ) {
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-            Text(valueLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy)
+            Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+            Text(valueLabel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Navy)
         }
         Slider(
             value = value,
             onValueChange = onChange,
             valueRange = range,
-            colors = SliderDefaults.colors(thumbColor = Green, activeTrackColor = Green)
+            colors = SliderDefaults.colors(thumbColor = Green, activeTrackColor = Green, inactiveTrackColor = BorderGray)
         )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(lowLabel, fontSize = 13.sp, color = HintGray)
+            Text(highLabel, fontSize = 13.sp, color = HintGray)
+        }
     }
 }
 
 @Composable
-private fun OptionPill(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun OptionPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    height: Dp = 50.dp,
+    fontSize: TextUnit = 15.sp,
+    shape: Shape = RoundedCornerShape(14.dp)
+) {
     Card(
         onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (selected) GreenPale else Color.White),
-        border = BorderStroke(1.5.dp, if (selected) Green else BorderGray)
+        enabled = enabled,
+        modifier = modifier.height(height),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) GreenPale else Color.White,
+            disabledContainerColor = Neutral
+        ),
+        border = if (selected) BorderStroke(2.dp, Green) else BorderStroke(1.dp, BorderGray)
     ) {
-        Box(Modifier.padding(vertical = 14.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Navy)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    !enabled -> BorderGray
+                    selected -> Green
+                    else -> Navy
+                }
+            )
         }
     }
 }
@@ -724,7 +937,26 @@ private fun spinLabel(spin: String): String = stringResource(
 
 @Composable
 private fun sequenceLabel(sequence: String): String =
-    stringResource(if (sequence == "FIXED POINT") R.string.sequence_fixed else R.string.sequence_rotate)
+    stringResource(if (sequence == CustomConfig.FIXED_POINT) R.string.sequence_fixed else R.string.sequence_rotate)
+
+@Composable
+private fun intensityLabel(intensity: SpinIntensity): String = stringResource(
+    when (intensity) {
+        SpinIntensity.LIGHT -> R.string.intensity_light
+        SpinIntensity.MEDIUM -> R.string.intensity_medium
+        SpinIntensity.HEAVY -> R.string.intensity_heavy
+    }
+)
+
+@Composable
+private fun zoneLabel(zone: LandingZone): String = stringResource(
+    when (zone) {
+        LandingZone.NET_LEFT -> R.string.zone_net_left
+        LandingZone.NET_RIGHT -> R.string.zone_net_right
+        LandingZone.BACK_LEFT -> R.string.zone_back_left
+        LandingZone.BACK_RIGHT -> R.string.zone_back_right
+    }
+)
 
 @Composable
 private fun SummaryScreen(state: SessionState.Summary, onPayment: () -> Unit, modifier: Modifier) {

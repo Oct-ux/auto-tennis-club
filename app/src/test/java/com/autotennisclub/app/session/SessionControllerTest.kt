@@ -334,6 +334,51 @@ class SessionControllerTest {
         assertEquals(listOf("SESSION_EXPIRED"), station.errorCodes)
     }
 
+    // --- ← BACK ---
+
+    @Test fun backWalksTheCustomFlowAndKeepsTheConfiguration() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        with(station.session) {
+            start()
+            selectTraining(TrainingMode.CUSTOM)
+            selectDuration(30)
+            updateCustomConfig(CustomConfig(velocity = 110))
+            confirmCustomConfig()
+            proceedToPayment()
+        }
+        station.session.back()
+        assertTrue(station.state is SessionState.Summary)
+        station.session.back()
+        assertEquals(110, (station.state as SessionState.CustomConfigState).config.velocity)
+        station.session.back()
+        assertEquals(SessionState.DurationSelection(TrainingMode.CUSTOM), station.state)
+        station.session.back()
+        assertEquals(SessionState.TrainingSelection, station.state)
+        station.session.back()
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun backIsIgnoredWhileTheTerminalIsCharging() = runTest {
+        val station = atPayment()
+        station.session.pay()
+        station.session.back()
+        assertEquals(PaymentState.PROCESSING, station.paymentStatus)
+    }
+
+    @Test fun customConfigNeedsAtLeastOneZone() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        with(station.session) {
+            start()
+            selectTraining(TrainingMode.CUSTOM)
+            selectDuration(15)
+            updateCustomConfig(CustomConfig(zones = emptySet()))
+            confirmCustomConfig()
+        }
+        assertTrue(station.state is SessionState.CustomConfigState)
+    }
+
     // --- Return to Home on inactivity ---
 
     @Test fun abandonedSelectionReturnsHomeAfterOneMinute() = runTest {

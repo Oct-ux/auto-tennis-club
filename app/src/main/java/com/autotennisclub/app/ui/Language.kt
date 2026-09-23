@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.autotennisclub.app.ui.theme.BorderGray
 import com.autotennisclub.app.ui.theme.Green
 import com.autotennisclub.app.ui.theme.GreenPale
@@ -52,6 +53,23 @@ fun LocalizedContent(language: AppLanguage, content: @Composable () -> Unit) {
         LocalConfiguration provides configuration,
         content = content
     )
+}
+
+/**
+ * A Dialog opens its own window, which resets LocalContext / LocalConfiguration to the
+ * tablet's language. Re-provide the customer's language inside it.
+ */
+@Composable
+fun LocalizedDialog(onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    Dialog(onDismissRequest = onDismissRequest) {
+        CompositionLocalProvider(
+            LocalContext provides context,
+            LocalConfiguration provides configuration,
+            content = content
+        )
+    }
 }
 
 @Composable

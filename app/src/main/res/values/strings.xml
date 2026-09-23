@@ -88,4 +88,26 @@
     <string name="recovery_payment">Payment</string>
     <string name="recovery_machine">Machine</string>
     <string name="recovery_timer">Timer</string>
+
+    <!-- Navigation, cancel modal, custom configuration details -->
+    <string name="back">← BACK</string>
+    <string name="cancel_session">← CANCEL SESSION</string>
+    <string name="cancel_title">Cancel session?</string>
+    <string name="cancel_body">This session has already been paid and will NOT be refunded. Are you sure you want to cancel?</string>
+    <string name="keep_playing">KEEP PLAYING</string>
+    <string name="confirm_cancel">YES, CANCEL (NO REFUND)</string>
+    <string name="landing_zone">LANDING ZONE • tap to select</string>
+    <string name="zone_net_left">NET LEFT</string>
+    <string name="zone_net_right">NET RIGHT</string>
+    <string name="zone_back_left">BACK LEFT</string>
+    <string name="zone_back_right">BACK RIGHT</string>
+    <string name="speed_slow">Slow</string>
+    <string name="speed_fast">Fast</string>
+    <string name="frequency_detail">time between balls</string>
+    <string name="frequency_fast">Fast rally</string>
+    <string name="frequency_relaxed">Relaxed</string>
+    <string name="intensity">INTENSITY</string>
+    <string name="intensity_light">LIGHT</string>
+    <string name="intensity_medium">MEDIUM</string>
+    <string name="intensity_heavy">HEAVY</string>
 </resources>

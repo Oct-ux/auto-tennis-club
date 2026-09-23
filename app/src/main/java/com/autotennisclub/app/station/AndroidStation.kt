@@ -12,7 +12,9 @@ import com.autotennisclub.app.session.ActiveSession
 import com.autotennisclub.app.session.CustomConfig
 import com.autotennisclub.app.session.ErrorEntry
 import com.autotennisclub.app.session.ErrorLogStore
+import com.autotennisclub.app.session.LandingZone
 import com.autotennisclub.app.session.SessionStore
+import com.autotennisclub.app.session.SpinIntensity
 import com.autotennisclub.app.session.TrainingMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -60,9 +62,12 @@ class PrefsSessionStore(context: Context) : SessionStore {
                     velocity = prefs.getInt("velocity", 80),
                     frequencyGrade = prefs.getInt("frequencyGrade", 30),
                     spin = prefs.getString("spin", null) ?: "TOPSPIN",
-                    spinValue = prefs.getInt("spinValue", 10),
-                    sequence = prefs.getString("sequence", null) ?: "ROTATE POINTS",
-                    landingZones = prefs.getInt("landingZones", 4)
+                    intensity = prefs.getString("intensity", null)
+                        ?.let { SpinIntensity.valueOf(it) } ?: SpinIntensity.MEDIUM,
+                    sequence = prefs.getString("sequence", null) ?: CustomConfig.ROTATE_POINTS,
+                    zones = prefs.getString("zones", null)
+                        ?.split(',')?.filter { it.isNotBlank() }?.map { LandingZone.valueOf(it) }?.toSet()
+                        ?: LandingZone.entries.toSet()
                 )
             } else {
                 null
@@ -85,9 +90,9 @@ class PrefsSessionStore(context: Context) : SessionStore {
                 putInt("velocity", it.velocity)
                 putInt("frequencyGrade", it.frequencyGrade)
                 putString("spin", it.spin)
-                putInt("spinValue", it.spinValue)
+                putString("intensity", it.intensity.name)
                 putString("sequence", it.sequence)
-                putInt("landingZones", it.landingZones)
+                putString("zones", it.zones.joinToString(",") { zone -> zone.name })
             }
             putLong("remainingSeconds", session.remainingSeconds)
             putLong("savedAtMillis", session.savedAtMillis)

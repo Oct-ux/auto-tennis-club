@@ -45,8 +45,9 @@ import com.autotennisclub.app.ui.theme.TextSecondary
 fun DebugPanel(
     state: SessionState,
     session: SessionController,
-    machine: MockPusunMachine,
-    payments: MockPaymentGateway,
+    /** Null in production builds: the machine and terminal are real. */
+    machine: MockPusunMachine?,
+    payments: MockPaymentGateway?,
     kioskSetUp: Boolean,
     onRemoveKiosk: () -> Unit,
     modifier: Modifier = Modifier
@@ -79,21 +80,25 @@ fun DebugPanel(
                     // Undoes `dpm set-device-owner` on a development device.
                     DebugButton("Kiosk · remove device owner", enabled = kioskSetUp, onClick = onRemoveKiosk)
 
-                    Section("MACHINE")
-                    DebugButton("S03/S02 · Machine fault") { machine.simulateFault(1) }
-                    DebugButton("S04 · Out of balls") { machine.simulateFault(3) }
-                    DebugButton("S05 · Connection lost (fails after 5 tries)", onClick = machine::simulateConnectionLost)
-                    DebugButton("Machine OK (reconnect / clear fault)", onClick = machine::simulateMachineOk)
+                    if (machine != null) {
+                        Section("MACHINE")
+                        DebugButton("S03/S02 · Machine fault") { machine.simulateFault(1) }
+                        DebugButton("S04 · Out of balls") { machine.simulateFault(3) }
+                        DebugButton("S05 · Connection lost (fails after 5 tries)", onClick = machine::simulateConnectionLost)
+                        DebugButton("Machine OK (reconnect / clear fault)", onClick = machine::simulateMachineOk)
+                    }
 
-                    val nextOutcome by payments.nextOutcome.collectAsState()
-                    val terminalReady by payments.ready.collectAsState()
-                    Section("PAYMENT · next attempt: $nextOutcome")
-                    DebugButton("S06 · Terminal timeout") { payments.setNextOutcome(Outcome.TIMEOUT) }
-                    DebugButton("S07 · Cancelled on terminal") { payments.setNextOutcome(Outcome.CANCELLED) }
-                    DebugButton("Card declined") { payments.setNextOutcome(Outcome.FAILED) }
-                    DebugButton("S08 · Verification fails") { payments.setNextOutcome(Outcome.UNVERIFIED) }
-                    DebugButton(if (terminalReady) "S02 · Terminal offline" else "Terminal back online") {
-                        payments.setReady(!terminalReady)
+                    if (payments != null) {
+                        val nextOutcome by payments.nextOutcome.collectAsState()
+                        val terminalReady by payments.ready.collectAsState()
+                        Section("PAYMENT · next attempt: $nextOutcome")
+                        DebugButton("S06 · Terminal timeout") { payments.setNextOutcome(Outcome.TIMEOUT) }
+                        DebugButton("S07 · Cancelled on terminal") { payments.setNextOutcome(Outcome.CANCELLED) }
+                        DebugButton("Card declined") { payments.setNextOutcome(Outcome.FAILED) }
+                        DebugButton("S08 · Verification fails") { payments.setNextOutcome(Outcome.UNVERIFIED) }
+                        DebugButton(if (terminalReady) "S02 · Terminal offline" else "Terminal back online") {
+                            payments.setReady(!terminalReady)
+                        }
                     }
                 }
             }
