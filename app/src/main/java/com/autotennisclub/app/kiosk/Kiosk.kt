@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 
 /** Device admin component; `dpm set-device-owner` points at it. */
 class KioskAdminReceiver : DeviceAdminReceiver()
@@ -23,6 +24,7 @@ enum class KioskStatus { NOT_SET_UP, LOCKED, UNLOCKED }
  * (set once per tablet with adb, see docs). On a development device nothing changes.
  */
 object Kiosk {
+    private const val TAG = "Kiosk"
     private const val HOME_ALIAS = "com.autotennisclub.app.KioskHome"
 
     fun isDeviceOwner(context: Context): Boolean =
@@ -42,6 +44,12 @@ object Kiosk {
      */
     fun configure(context: Context) {
         if (!isDeviceOwner(context)) return
+        // A half-provisioned tablet must still run the customer app, just without kiosk.
+        runCatching { applyPolicies(context) }
+            .onFailure { Log.e(TAG, "Kiosk setup failed; running without kiosk", it) }
+    }
+
+    private fun applyPolicies(context: Context) {
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(context, KioskAdminReceiver::class.java)
 
@@ -72,13 +80,22 @@ object Kiosk {
 
     /** Locks the screen to the app. Called on every resume, so leaving Settings re-locks it. */
     fun lock(activity: Activity) {
-        if (status(activity) == KioskStatus.UNLOCKED) activity.startLockTask()
+        if (status(activity) != KioskStatus.UNLOCKED) return
+        // Device owner may have been set while the app was running: without the allowlist,
+        // startLockTask() falls back to screen pinning, which a customer can undo.
+        val dpm = activity.getSystemService(DevicePolicyManager::class.java)
+        if (!dpm.isLockTaskPermitted(activity.packageName)) configure(activity)
+        if (dpm.isLockTaskPermitted(activity.packageName)) {
+            runCatching { activity.startLockTask() }
+                .onFailure { Log.e(TAG, "Could not lock task", it) }
+        }
     }
 
     /** Operator: unlock and open Android settings. Coming back to the app locks again. */
     fun openAndroidSettings(activity: Activity) {
         if (status(activity) == KioskStatus.LOCKED) activity.stopLockTask()
-        activity.startActivity(Intent(Settings.ACTION_SETTINGS))
+        // Own task: otherwise Settings relaunches itself, our app resumes in between and re-locks.
+        activity.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /** Development only: gives the tablet back its normal launcher and removes device owner. */
@@ -87,14 +104,16 @@ object Kiosk {
         if (!isDeviceOwner(activity)) return
         val dpm = activity.getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(activity, KioskAdminReceiver::class.java)
-        if (status(activity) == KioskStatus.LOCKED) activity.stopLockTask()
-        dpm.clearPackagePersistentPreferredActivities(admin, activity.packageName)
-        activity.packageManager.setComponentEnabledSetting(
-            ComponentName(activity.packageName, HOME_ALIAS),
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
-        dpm.clearDeviceOwnerApp(activity.packageName)
+        runCatching {
+            if (status(activity) == KioskStatus.LOCKED) activity.stopLockTask()
+            dpm.clearPackagePersistentPreferredActivities(admin, activity.packageName)
+            activity.packageManager.setComponentEnabledSetting(
+                ComponentName(activity.packageName, HOME_ALIAS),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            dpm.clearDeviceOwnerApp(activity.packageName)
+        }.onFailure { Log.e(TAG, "Could not remove device owner", it) }
     }
 }
 

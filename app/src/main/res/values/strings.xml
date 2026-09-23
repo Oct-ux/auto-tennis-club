@@ -58,7 +58,6 @@
     <string name="paused">PAUSED</string>
     <string name="stop">STOP</string>
     <string name="machine_active">MACHINE ACTIVE</string>
-    <string name="machine_paused">MACHINE PAUSED</string>
     <string name="session_complete">SESSION COMPLETE</string>
     <string name="great_training">Great training!</string>
     <string name="finish">FINISH</string>

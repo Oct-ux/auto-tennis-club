@@ -1,5 +1,6 @@
 package com.autotennisclub.app
 
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
@@ -37,13 +38,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,26 +65,18 @@ import com.autotennisclub.app.kiosk.Kiosk
 import com.autotennisclub.app.kiosk.KioskStatus
 import com.autotennisclub.app.kiosk.bluetoothPermissions
 import com.autotennisclub.app.machine.MachineState
-import com.autotennisclub.app.machine.MockPusunMachine
-import com.autotennisclub.app.payment.MockPaymentGateway
 import com.autotennisclub.app.session.CustomConfig
 import com.autotennisclub.app.session.ErrorEntry
-import com.autotennisclub.app.session.ErrorLog
 import com.autotennisclub.app.session.PaymentState
 import com.autotennisclub.app.session.RecoveryStep
-import com.autotennisclub.app.session.SessionController
 import com.autotennisclub.app.session.SessionDiagnostics
 import com.autotennisclub.app.session.SessionState
 import com.autotennisclub.app.session.TrainingMode
 import com.autotennisclub.app.session.TrainingOverlay
 import com.autotennisclub.app.session.UnavailableReason
 import com.autotennisclub.app.session.trainingOverlay
-import com.autotennisclub.app.station.PrefsErrorLogStore
-import com.autotennisclub.app.station.PrefsSessionStore
 import com.autotennisclub.app.station.DeviceStatus
 import com.autotennisclub.app.station.StationState
-import com.autotennisclub.app.station.deviceStatusFlow
-import com.autotennisclub.app.station.stationState
 import com.autotennisclub.app.ui.AppLanguage
 import com.autotennisclub.app.ui.LanguagePicker
 import com.autotennisclub.app.ui.LocalizedContent
@@ -103,6 +94,7 @@ import com.autotennisclub.app.ui.theme.GreenDark
 import com.autotennisclub.app.ui.theme.GreenPale
 import com.autotennisclub.app.ui.theme.Navy
 import com.autotennisclub.app.ui.theme.TextSecondary
+import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -166,17 +158,24 @@ data class SessionActions(
 @Composable
 fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> Unit = {}) {
     val context = LocalContext.current.applicationContext
-    val scope = rememberCoroutineScope()
-    val machine = remember { MockPusunMachine(scope) }
-    val payments = remember { MockPaymentGateway() }
-    val errors = remember { ErrorLog(PrefsErrorLogStore(context)) }
-    val session = remember { SessionController(scope, machine, payments, PrefsSessionStore(context), errors) }
-    val station = remember {
-        stationState(scope, session, machine, payments.providerName, errors, context.deviceStatusFlow())
-    }
-    val state by station.collectAsState()
+    val station = remember { (context as StationApp).station }
+    val machine = station.machine
+    val payments = station.payments
+    val session = station.session
+    val state by station.state.collectAsState()
     var askPin by remember { mutableStateOf(false) }
-    var language by rememberSaveable { mutableStateOf(AppLanguage.DEFAULT) }
+    // Saved so a customer who restarts mid-session (S09) keeps their language.
+    val uiPrefs = remember { context.getSharedPreferences("ui", Context.MODE_PRIVATE) }
+    var language by rememberSaveable {
+        mutableStateOf(
+            uiPrefs.getString("language", null)
+                ?.let { saved -> AppLanguage.entries.firstOrNull { it.name == saved } }
+                ?: AppLanguage.DEFAULT
+        )
+    }
+    LaunchedEffect(language) {
+        uiPrefs.edit { putString("language", language.name) }
+    }
 
     // Every customer starts in the default language: reset whenever the station is back at Home.
     val atHome = state.session == SessionState.Idle
@@ -198,13 +197,6 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
             context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) permissionRequest.launch(missing.toTypedArray())
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            session.dispose()
-            machine.shutdown()
-        }
     }
 
     val actions = remember(session) {
@@ -898,10 +890,13 @@ private fun TrainingScreen(
                 Text(stringResource(R.string.stop))
             }
         }
-        StatusBadge(
-            stringResource(if (paused) R.string.machine_paused else R.string.machine_active),
-            modifier = Modifier.align(Alignment.BottomStart).padding(24.dp)
-        )
+        // While paused the overlay card says why; the badge would sit under it.
+        if (!paused) {
+            StatusBadge(
+                stringResource(R.string.machine_active),
+                modifier = Modifier.align(Alignment.BottomStart).padding(24.dp)
+            )
+        }
     }
 }
 

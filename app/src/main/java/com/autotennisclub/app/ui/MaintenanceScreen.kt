@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -81,7 +83,7 @@ internal fun MaintenanceScreen(station: StationState, actions: MaintenanceAction
             TextButton(onClick = actions.onClose) { Text("CLOSE", color = Navy, fontWeight = FontWeight.Bold) }
         }
 
-        Row(Modifier.height(190.dp), horizontalArrangement = Arrangement.spacedBy(30.dp)) {
+        Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(30.dp)) {
             val diagnostics = station.sessionDiagnostics
             InfoCard(
                 "STATION STATUS",
@@ -117,7 +119,7 @@ internal fun MaintenanceScreen(station: StationState, actions: MaintenanceAction
             )
         }
 
-        Row(Modifier.height(210.dp), horizontalArrangement = Arrangement.spacedBy(30.dp)) {
+        Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(30.dp)) {
             PanelCard("MACHINE TEST") {
                 OperatorButton("START TEST") { actions.onMachineTest(MachineTest.START) }
                 OperatorButton("STOP TEST") { actions.onMachineTest(MachineTest.STOP) }
@@ -212,10 +214,10 @@ private fun OperatorButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(30.dp),
+        modifier = modifier.height(36.dp),
         shape = RoundedCornerShape(10.dp),
         colors = ButtonDefaults.buttonColors(containerColor = GreenPale, contentColor = Color.Black),
-        contentPadding = ButtonDefaults.TextButtonContentPadding
+        contentPadding = PaddingValues(horizontal = 12.dp)
     ) {
         Text(label, fontSize = 13.sp)
     }
