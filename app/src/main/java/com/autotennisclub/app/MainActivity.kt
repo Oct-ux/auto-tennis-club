@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autotennisclub.app.debug.DebugPanel
 import com.autotennisclub.app.machine.MockPusunMachine
+import com.autotennisclub.app.payment.MockPaymentGateway
 import com.autotennisclub.app.session.CustomConfig
 import com.autotennisclub.app.session.PaymentState
 import com.autotennisclub.app.session.SessionController
@@ -82,7 +83,8 @@ class MainActivity : ComponentActivity() {
 fun AutoTennisClubApp() {
     val scope = rememberCoroutineScope()
     val machine = remember { MockPusunMachine(scope) }
-    val session = remember { SessionController(scope, machine) }
+    val payments = remember { MockPaymentGateway() }
+    val session = remember { SessionController(scope, machine, payments) }
     val state by session.state.collectAsState()
 
     DisposableEffect(Unit) {
@@ -102,8 +104,7 @@ fun AutoTennisClubApp() {
                 onCustomConfig = session::updateCustomConfig,
                 onConfirmCustom = session::confirmCustomConfig,
                 onPayment = session::proceedToPayment,
-                onPay = session::simulatePayment,
-                onPaymentFailure = session::simulatePaymentFailure,
+                onPay = session::pay,
                 onRetryPayment = session::retryPayment,
                 onCancelPayment = session::cancelPayment,
                 onStartPaid = session::startPaidSession,
@@ -119,6 +120,7 @@ fun AutoTennisClubApp() {
                     state = state,
                     session = session,
                     machine = machine,
+                    payments = payments,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(padding).padding(16.dp)
                 )
             }
@@ -136,7 +138,6 @@ private fun SessionUi(
     onConfirmCustom: () -> Unit,
     onPayment: () -> Unit,
     onPay: () -> Unit,
-    onPaymentFailure: () -> Unit,
     onRetryPayment: () -> Unit,
     onCancelPayment: () -> Unit,
     onStartPaid: () -> Unit,
@@ -214,7 +215,7 @@ private fun SessionUi(
                 action = "TRY AGAIN" to onRetryPayment,
                 modifier = modifier
             )
-            else -> PaymentScreen(state, onPay, onPaymentFailure, onRetryPayment, onCancelPayment, onStartPaid, modifier)
+            else -> PaymentScreen(state, onPay, onRetryPayment, onCancelPayment, onStartPaid, modifier)
         }
         SessionState.Preparing -> PreparingScreen(modifier)
         is SessionState.Countdown -> CountdownScreen(state.seconds, modifier)
@@ -538,7 +539,6 @@ private fun SummaryCard(
 private fun PaymentScreen(
     state: SessionState.Payment,
     onPay: () -> Unit,
-    onPaymentFailure: () -> Unit,
     onRetry: () -> Unit,
     onCancel: () -> Unit,
     onStartPaid: () -> Unit,
@@ -559,12 +559,6 @@ private fun PaymentScreen(
                     Text("TAP YOUR CARD OR PHONE", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(20.dp))
-                Text(
-                    "Simulate failed payment",
-                    fontSize = 14.sp,
-                    color = TextSecondary,
-                    modifier = Modifier.clickable(onClick = onPaymentFailure).padding(8.dp)
-                )
                 Text(
                     "CANCEL PAYMENT",
                     fontSize = 14.sp,
@@ -771,7 +765,6 @@ private fun PhaseStatesPreview(@PreviewParameter(PhaseStatesProvider::class) sta
             onConfirmCustom = {},
             onPayment = {},
             onPay = {},
-            onPaymentFailure = {},
             onRetryPayment = {},
             onCancelPayment = {},
             onStartPaid = {},

@@ -15,6 +15,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autotennisclub.app.machine.MockPusunMachine
-import com.autotennisclub.app.session.PaymentState
+import com.autotennisclub.app.payment.MockPaymentGateway
+import com.autotennisclub.app.payment.MockPaymentGateway.Outcome
 import com.autotennisclub.app.session.SessionController
 import com.autotennisclub.app.session.SessionState
 import com.autotennisclub.app.ui.theme.BorderGray
@@ -43,6 +45,7 @@ fun DebugPanel(
     state: SessionState,
     session: SessionController,
     machine: MockPusunMachine,
+    payments: MockPaymentGateway,
     modifier: Modifier = Modifier
 ) {
     var open by remember { mutableStateOf(false) }
@@ -86,10 +89,12 @@ fun DebugPanel(
                     DebugButton("Connection failed", onClick = machine::simulateConnectionFailed)
                     DebugButton("Machine OK (reconnect / clear fault)", onClick = machine::simulateReconnected)
 
-                    val paymentOpen = state is SessionState.Payment && state.status != PaymentState.SUCCESS
-                    Section("PAYMENT")
-                    DebugButton("S06 · Terminal timeout", enabled = paymentOpen, onClick = session::simulatePaymentTimeout)
-                    DebugButton("S07 · Payment cancelled", enabled = paymentOpen, onClick = session::cancelPayment)
+                    val nextOutcome by payments.nextOutcome.collectAsState()
+                    Section("PAYMENT · next attempt: $nextOutcome")
+                    DebugButton("S06 · Terminal timeout") { payments.setNextOutcome(Outcome.TIMEOUT) }
+                    DebugButton("S07 · Cancelled on terminal") { payments.setNextOutcome(Outcome.CANCELLED) }
+                    DebugButton("Card declined") { payments.setNextOutcome(Outcome.FAILED) }
+                    DebugButton("S08 · Verification fails") { payments.setNextOutcome(Outcome.UNVERIFIED) }
                 }
             }
         }

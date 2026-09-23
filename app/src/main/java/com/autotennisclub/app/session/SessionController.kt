@@ -2,6 +2,8 @@ package com.autotennisclub.app.session
 
 import com.autotennisclub.app.machine.MachineState
 import com.autotennisclub.app.machine.TennisMachine
+import com.autotennisclub.app.payment.PaymentGateway
+import com.autotennisclub.app.payment.PaymentResult
 import com.autotennisclub.app.pusun.SpinType
 import com.autotennisclub.app.pusun.StartMode
 import kotlinx.coroutines.CoroutineScope
@@ -12,10 +14,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.UUID
+import kotlin.math.roundToLong
 
 class SessionController(
     private val scope: CoroutineScope,
     private val machine: TennisMachine,
+    private val payments: PaymentGateway,
     private val timer: TrainingTimer = TrainingTimer(scope),
     private val countdownSeconds: Int = 5,
     private val selfCheckMillis: Long = 1500,
@@ -118,28 +123,36 @@ class SessionController(
         }
     }
 
-    /** WAITING → PROCESSING → VERIFYING (S08) → SUCCESS. */
-    fun simulatePayment() {
+    /** WAITING → PROCESSING → VERIFYING (S08) → SUCCESS, or FAILED / CANCELLED (S07) / TIMEOUT (S06). */
+    fun pay() {
         val current = _state.value as? SessionState.Payment ?: return
         if (current.status != PaymentState.WAITING) return
 
         _state.value = current.copy(status = PaymentState.PROCESSING)
         paymentJob?.cancel()
         paymentJob = scope.launch {
-            delay(900)
-            setPaymentState(PaymentState.VERIFYING)
-            delay(900)
-            setPaymentState(PaymentState.SUCCESS)
+            val reference = UUID.randomUUID().toString()
+            when (val result = payments.startPayment((current.price * 100).roundToLong(), reference)) {
+                is PaymentResult.Success -> {
+                    setPaymentState(PaymentState.VERIFYING)
+                    // No timeout here: the customer may already be charged, so S08
+                    // keeps saying "do not pay again" until the provider answers.
+                    val verified = payments.verify(result.transactionId)
+                    setPaymentState(if (verified) PaymentState.SUCCESS else PaymentState.FAILED)
+                }
+                is PaymentResult.Failed -> setPaymentState(PaymentState.FAILED)
+                PaymentResult.Cancelled -> setPaymentState(PaymentState.CANCELLED)
+                PaymentResult.Timeout -> setPaymentState(PaymentState.TIMEOUT)
+            }
         }
     }
 
-    fun simulatePaymentFailure() = endPaymentAttempt(PaymentState.FAILED)
-
-    /** S06 — terminal did not respond. */
-    fun simulatePaymentTimeout() = endPaymentAttempt(PaymentState.TIMEOUT)
-
-    /** S07 — customer or terminal cancelled. */
-    fun cancelPayment() = endPaymentAttempt(PaymentState.CANCELLED)
+    /** S07 — customer backs out before paying. Once the terminal is processing, only it can cancel. */
+    fun cancelPayment() {
+        val current = _state.value as? SessionState.Payment ?: return
+        if (current.status != PaymentState.WAITING) return
+        _state.value = current.copy(status = PaymentState.CANCELLED)
+    }
 
     fun retryPayment() {
         val current = _state.value as? SessionState.Payment ?: return
@@ -307,13 +320,6 @@ class SessionController(
     private fun setPaymentState(status: PaymentState) {
         val latest = _state.value as? SessionState.Payment ?: return
         _state.value = latest.copy(status = status)
-    }
-
-    private fun endPaymentAttempt(status: PaymentState) {
-        val current = _state.value as? SessionState.Payment ?: return
-        if (current.status == PaymentState.SUCCESS) return
-        paymentJob?.cancel()
-        _state.value = current.copy(status = status)
     }
 
     private fun cancelJobs() {
