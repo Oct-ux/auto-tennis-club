@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Station settings live in local.properties (not committed):
+//   operator.pin=1234
+//   support.contact=+34 600 000 000
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -17,6 +26,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val operatorPin = localProperties.getProperty("operator.pin") ?: "0000".also {
+            logger.warn("operator.pin missing in local.properties: Maintenance PIN defaults to 0000")
+        }
+        buildConfigField("String", "OPERATOR_PIN", "\"$operatorPin\"")
+        buildConfigField("String", "SUPPORT_CONTACT", "\"${localProperties.getProperty("support.contact", "")}\"")
     }
 
     buildTypes {

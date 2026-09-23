@@ -1,5 +1,7 @@
 package com.autotennisclub.app.session
 
+import com.autotennisclub.app.pusun.SpinType
+
 enum class TrainingMode {
     BASIC,
     TRAINING,
@@ -28,6 +30,31 @@ enum class UnavailableReason {
     PAYMENT_OFFLINE
 }
 
+/** Figma S09: what has been checked before handing a paid session back to the customer. */
+enum class RecoveryStep {
+    CHECKING,
+    PAYMENT_VERIFIED,
+    MACHINE_VERIFIED,
+    TIMER_VERIFIED,
+    RECOVERED
+}
+
+/** Figma 09 overlay model: what is shown over the paused training timer. */
+enum class TrainingOverlay {
+    OUT_OF_BALLS,
+    CONNECTION_LOST,
+    MACHINE_FAULT,
+    RECOVERING
+}
+
+/** Operator machine tests (Figma MAINTENANCE · MACHINE TEST). */
+enum class MachineTest {
+    START,
+    STOP,
+    SPEED_FREQUENCY,
+    SPIN
+}
+
 data class CustomConfig(
     val velocity: Int = 80,
     val frequencyGrade: Int = 30,
@@ -35,6 +62,20 @@ data class CustomConfig(
     val spinValue: Int = 10,
     val sequence: String = "ROTATE POINTS",
     val landingZones: Int = 4
+) {
+    val spinType: SpinType
+        get() = when (spin) {
+            "BACKSPIN" -> SpinType.BACKSPIN
+            "NONE", "NO SPIN" -> SpinType.NONE
+            else -> SpinType.TOPSPIN
+        }
+}
+
+/** Session-side facts for the operator panel. */
+data class SessionDiagnostics(
+    val paymentReady: Boolean? = null,
+    val lastPayment: PaymentState? = null,
+    val lastReference: String? = null
 )
 
 sealed interface SessionState {
@@ -78,14 +119,39 @@ sealed interface SessionState {
         val attempt: Int
     ) : SessionState
 
-    /** S09 — checking payment, machine and timer before resuming a paused session. */
-    data class Recovering(val remainingSeconds: Long, val mode: TrainingMode) : SessionState
+    /** S09 — checking payment, machine and timer before resuming a paid session. */
+    data class Recovering(
+        val step: RecoveryStep,
+        val remainingSeconds: Long,
+        val mode: TrainingMode,
+        /** True when resuming after the app was restarted, false after S04 / S05. */
+        val afterRestart: Boolean = false
+    ) : SessionState
 
-    /** S03 — hardware fault during a paid session. */
-    data class MachineFault(val reason: String, val code: Int? = null) : SessionState
+    /**
+     * S03 — hardware fault. With a paid session, [reference] lets the operator find
+     * the payment; [remainingSeconds] is set when the session had already started.
+     */
+    data class MachineFault(
+        val reason: String,
+        val code: Int? = null,
+        val reference: String? = null,
+        val remainingSeconds: Long? = null,
+        val mode: TrainingMode? = null
+    ) : SessionState
 
     data class Complete(val minutes: Int, val mode: TrainingMode) : SessionState
 
     /** Operator-only layer; not part of the customer flow. */
     data object Maintenance : SessionState
 }
+
+/** The overlay to draw over the paused training timer, or null when the timer is not on screen. */
+val SessionState.trainingOverlay: TrainingOverlay?
+    get() = when (this) {
+        is SessionState.BallsRequired -> TrainingOverlay.OUT_OF_BALLS
+        is SessionState.Reconnecting -> TrainingOverlay.CONNECTION_LOST
+        is SessionState.MachineFault -> if (remainingSeconds != null) TrainingOverlay.MACHINE_FAULT else null
+        is SessionState.Recovering -> if (!afterRestart) TrainingOverlay.RECOVERING else null
+        else -> null
+    }

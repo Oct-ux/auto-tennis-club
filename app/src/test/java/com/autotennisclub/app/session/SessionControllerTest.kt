@@ -3,13 +3,17 @@ package com.autotennisclub.app.session
 import com.autotennisclub.app.machine.MockPusunMachine
 import com.autotennisclub.app.payment.MockPaymentGateway
 import com.autotennisclub.app.payment.MockPaymentGateway.Outcome
+import com.autotennisclub.app.payment.PaymentLookup
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,18 +22,28 @@ class SessionControllerTest {
     private class Station(
         val session: SessionController,
         val machine: MockPusunMachine,
-        val payments: MockPaymentGateway
+        val payments: MockPaymentGateway,
+        val store: SessionStore,
+        val errors: ErrorLog
     ) {
-        val paymentStatus: PaymentState
-            get() = (session.state.value as SessionState.Payment).status
+        val state: SessionState get() = session.state.value
+        val paymentStatus: PaymentState get() = (state as SessionState.Payment).status
+        val errorCodes: List<String> get() = errors.entries.value.map { it.code }
     }
 
-    private fun TestScope.station(): Station {
+    private fun TestScope.station(
+        store: SessionStore = InMemorySessionStore(),
+        payments: MockPaymentGateway = MockPaymentGateway()
+    ): Station {
+        val clock = { testScheduler.currentTime }
         val machine = MockPusunMachine(backgroundScope)
-        val payments = MockPaymentGateway()
-        val session = SessionController(backgroundScope, machine, payments, countdownSeconds = 1)
+        val errors = ErrorLog(clock = clock)
+        val session = SessionController(
+            backgroundScope, machine, payments,
+            store = store, errors = errors, clock = clock, countdownSeconds = 1
+        )
         runCurrent()
-        return Station(session, machine, payments)
+        return Station(session, machine, payments, store, errors)
     }
 
     /** Self check done, customer on the payment screen for [minutes]. */
@@ -51,15 +65,39 @@ class SessionControllerTest {
         advanceTimeBy(2_000)
         station.session.startPaidSession()
         advanceTimeBy(1_500)
-        assertTrue(station.session.state.value is SessionState.Running)
+        assertTrue(station.state is SessionState.Running)
         return station
     }
 
-    @Test fun selfCheckGoesIdleWhenMachineHealthy() = runTest {
+    private fun saved(
+        transactionId: String? = "tx-1",
+        remainingSeconds: Long = 600,
+        savedAtMillis: Long = -2 * 60_000L
+    ) = ActiveSession(
+        reference = "ref-1",
+        transactionId = transactionId,
+        mode = TrainingMode.BASIC,
+        minutes = 15,
+        priceCents = 690,
+        config = null,
+        remainingSeconds = remainingSeconds,
+        savedAtMillis = savedAtMillis
+    )
+
+    // --- Self check ---
+
+    @Test fun selfCheckConnectsMachineAndGoesIdle() = runTest {
         val station = station()
-        assertEquals(SessionState.StartingUp, station.session.state.value)
+        assertEquals(SessionState.StartingUp, station.state)
         advanceTimeBy(2_000)
-        assertEquals(SessionState.Idle, station.session.state.value)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun terminalOfflineMakesStationUnavailable() = runTest {
+        val payments = MockPaymentGateway().apply { setReady(false) }
+        val station = station(payments = payments)
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE), station.state)
     }
 
     @Test fun faultBeforePaymentMakesStationUnavailable() = runTest {
@@ -67,8 +105,18 @@ class SessionControllerTest {
         advanceTimeBy(2_000)
         station.machine.simulateFault(1)
         runCurrent()
-        assertEquals(SessionState.Unavailable(UnavailableReason.MACHINE_FAULT), station.session.state.value)
+        assertEquals(SessionState.Unavailable(UnavailableReason.MACHINE_FAULT), station.state)
     }
+
+    @Test fun noBallsBeforePaymentMakesStationUnavailable() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        station.machine.simulateFault(3)
+        runCurrent()
+        assertEquals(SessionState.Unavailable(UnavailableReason.OUT_OF_BALLS), station.state)
+    }
+
+    // --- Payment ---
 
     @Test fun paymentGoesThroughVerifyingAndChargesInCents() = runTest {
         val station = atPayment(minutes = 30)
@@ -81,12 +129,26 @@ class SessionControllerTest {
         assertEquals(1_200L, station.payments.lastAmountCents)
     }
 
-    @Test fun terminalTimeoutIsRetryable() = runTest {
+    @Test fun attemptIsSavedBeforeChargingAndPaidAfterVerification() = runTest {
+        val station = atPayment()
+        station.session.pay()
+        runCurrent()
+        val pending = station.store.load()!!
+        assertNull(pending.transactionId)
+        assertEquals(station.payments.lastReference, pending.reference)
+
+        advanceTimeBy(2_000)
+        assertTrue(station.store.load()!!.paid)
+    }
+
+    @Test fun terminalTimeoutIsRetryableAndLogged() = runTest {
         val station = atPayment()
         station.payments.setNextOutcome(Outcome.TIMEOUT)
         station.session.pay()
         advanceTimeBy(1_000)
         assertEquals(PaymentState.TIMEOUT, station.paymentStatus)
+        assertNull(station.store.load())
+        assertEquals(listOf("PAYMENT_TIMEOUT"), station.errorCodes)
         station.session.retryPayment()
         assertEquals(PaymentState.WAITING, station.paymentStatus)
     }
@@ -117,6 +179,7 @@ class SessionControllerTest {
         assertEquals(PaymentState.VERIFYING, station.paymentStatus)
         advanceTimeBy(1_000)
         assertEquals(PaymentState.FAILED, station.paymentStatus)
+        assertNull(station.store.load())
     }
 
     @Test fun outcomeAppliesToNextAttemptOnly() = runTest {
@@ -145,57 +208,167 @@ class SessionControllerTest {
         assertEquals(PaymentState.SUCCESS, station.paymentStatus)
     }
 
+    // --- Playing ---
+
+    @Test fun runningSessionIsSavedEveryTenSeconds() = runTest {
+        val station = runningSession()
+        advanceTimeBy(10_000)
+        assertEquals(15 * 60L - 10, station.store.load()!!.remainingSeconds)
+    }
+
+    @Test fun stopClearsSavedSession() = runTest {
+        val station = runningSession()
+        station.session.stopSession()
+        assertTrue(station.state is SessionState.Complete)
+        assertNull(station.store.load())
+    }
+
     @Test fun outOfBallsPausesTimerAndResumesAfterRecovery() = runTest {
         val station = runningSession()
         station.machine.simulateFault(3)
         runCurrent()
-        val paused = station.session.state.value as SessionState.BallsRequired
+        val paused = station.state as SessionState.BallsRequired
+        assertEquals(TrainingOverlay.OUT_OF_BALLS, paused.trainingOverlay)
         advanceTimeBy(10_000)
-        assertEquals(paused, station.session.state.value)
+        assertEquals(paused, station.state)
 
         station.session.confirmBallsReturned()
-        assertTrue(station.session.state.value is SessionState.Recovering)
+        assertTrue(station.state is SessionState.Recovering)
         advanceTimeBy(1_600)
-        val running = station.session.state.value as SessionState.Running
+        val running = station.state as SessionState.Running
         assertEquals(paused.remainingSeconds, running.remainingSeconds)
     }
 
     @Test fun connectionLossPausesAndReconnectRecovers() = runTest {
         val station = runningSession()
-        station.machine.simulateConnectionLost(attempt = 1)
+        station.machine.simulateConnectionLost()
         runCurrent()
-        assertEquals(1, (station.session.state.value as SessionState.Reconnecting).attempt)
-        station.machine.simulateConnectionLost(attempt = 2)
-        runCurrent()
-        assertEquals(2, (station.session.state.value as SessionState.Reconnecting).attempt)
+        assertEquals(1, (station.state as SessionState.Reconnecting).attempt)
+        advanceTimeBy(2_100)
+        assertEquals(2, (station.state as SessionState.Reconnecting).attempt)
 
-        station.machine.simulateReconnected()
-        runCurrent()
-        assertTrue(station.session.state.value is SessionState.Recovering)
+        station.machine.simulateMachineOk()
+        advanceTimeBy(2_000)
+        assertEquals(TrainingOverlay.RECOVERING, station.state.trainingOverlay)
         advanceTimeBy(1_600)
-        assertTrue(station.session.state.value is SessionState.Running)
+        assertTrue(station.state is SessionState.Running)
     }
 
-    @Test fun faultDuringPaidSessionShowsMachineFault() = runTest {
+    @Test fun connectionThatNeverComesBackEndsInOperatorNotice() = runTest {
         val station = runningSession()
+        station.machine.simulateConnectionLost()
+        advanceTimeBy(10_100)
+        val fault = station.state as SessionState.MachineFault
+        assertEquals("CONNECTION_FAILED", fault.reason)
+        assertNotNull(fault.reference)
+    }
+
+    @Test fun faultDuringPaidSessionLogsUnusedTimeForTheOperator() = runTest {
+        val station = runningSession()
+        advanceTimeBy(60_000)
         station.machine.simulateFault(1)
         runCurrent()
-        assertEquals(SessionState.MachineFault("WHEEL_PROTECTION", 1), station.session.state.value)
+        val fault = station.state as SessionState.MachineFault
+        assertEquals("WHEEL_PROTECTION", fault.reason)
+        assertEquals(15 * 60L - 60, fault.remainingSeconds)
+        assertEquals(TrainingOverlay.MACHINE_FAULT, fault.trainingOverlay)
+        assertNull(station.store.load())
+        val entry = station.errors.entries.value.first()
+        assertEquals("MACHINE_FAULT", entry.code)
+        assertTrue(entry.detail.contains("unused=14:00"))
     }
 
-    @Test fun faultWhileProcessingPaymentShowsMachineFault() = runTest {
+    @Test fun faultWhileProcessingPaymentShowsFullScreenMachineFault() = runTest {
         val station = atPayment()
         station.session.pay()
         station.machine.simulateFault(1)
         runCurrent()
-        assertTrue(station.session.state.value is SessionState.MachineFault)
+        val fault = station.state as SessionState.MachineFault
+        assertNotNull(fault.reference)
+        assertNull(fault.trainingOverlay)
+    }
+
+    // --- Recovery after an app restart (S09) ---
+
+    @Test fun paidSessionResumesAfterRestart() = runTest {
+        val station = station(store = InMemorySessionStore(saved()))
+        val recovering = station.state as SessionState.Recovering
+        assertTrue(recovering.afterRestart)
+        assertEquals(RecoveryStep.CHECKING, recovering.step)
+
+        advanceTimeBy(1_500)
+        assertEquals(RecoveryStep.PAYMENT_VERIFIED, (station.state as SessionState.Recovering).step)
+        advanceTimeBy(2_500)
+        assertEquals(SessionState.Running(600, TrainingMode.BASIC), station.state)
+    }
+
+    @Test fun paymentInterruptedMidwayIsLookedUpNotChargedAgain() = runTest {
+        val station = station(store = InMemorySessionStore(saved(transactionId = null)))
+        advanceTimeBy(4_000)
+        assertEquals(SessionState.Running(600, TrainingMode.BASIC), station.state)
+        assertNull(station.payments.lastReference)
+        assertTrue(station.store.load()!!.paid)
+    }
+
+    @Test fun unpaidAttemptIsDroppedAfterRestart() = runTest {
+        val payments = MockPaymentGateway().apply { lookupOverride = PaymentLookup.NotPaid }
+        val station = station(InMemorySessionStore(saved(transactionId = null)), payments)
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Idle, station.state)
+        assertNull(station.store.load())
+    }
+
+    @Test fun providerUnreachableKeepsSavedSession() = runTest {
+        val payments = MockPaymentGateway().apply { lookupOverride = PaymentLookup.Unreachable }
+        val station = station(InMemorySessionStore(saved(transactionId = null)), payments)
+        runCurrent()
+        assertEquals(SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE), station.state)
+        assertNotNull(station.store.load())
+    }
+
+    @Test fun sessionInterruptedOverTenMinutesAgoIsNotResumed() = runTest {
+        val station = station(store = InMemorySessionStore(saved(savedAtMillis = -11 * 60_000L)))
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Idle, station.state)
+        assertNull(station.store.load())
+        assertEquals(listOf("SESSION_EXPIRED"), station.errorCodes)
+    }
+
+    // --- Maintenance ---
+
+    @Test fun maintenanceIsRefusedWhileAPaidSessionPlays() = runTest {
+        val station = runningSession()
+        assertFalse(station.session.enterMaintenance())
+        assertTrue(station.state is SessionState.Running)
     }
 
     @Test fun maintenanceIgnoresMachineEvents() = runTest {
-        val station = runningSession()
-        station.session.enterMaintenance()
+        val station = station()
+        advanceTimeBy(2_000)
+        assertTrue(station.session.enterMaintenance())
         station.machine.simulateFault(1)
         runCurrent()
-        assertEquals(SessionState.Maintenance, station.session.state.value)
+        assertEquals(SessionState.Maintenance, station.state)
+    }
+
+    @Test fun resetStationClearsFaultAndReturnsToIdle() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        station.machine.simulateFault(1)
+        runCurrent()
+        assertTrue(station.session.enterMaintenance())
+        station.session.resetStation()
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun operatorCanEndAStuckSavedSession() = runTest {
+        val payments = MockPaymentGateway().apply { lookupOverride = PaymentLookup.Unreachable }
+        val station = station(InMemorySessionStore(saved(transactionId = null)), payments)
+        runCurrent()
+        assertTrue(station.session.enterMaintenance())
+        station.session.endSavedSession()
+        assertNull(station.store.load())
+        assertEquals(listOf("SESSION_ENDED_BY_OPERATOR"), station.errorCodes)
     }
 }

@@ -1,5 +1,6 @@
 package com.autotennisclub.app.debug
 
+import android.os.Process
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -70,31 +71,26 @@ fun DebugPanel(
 
                     Section("STATION")
                     DebugButton("S01 · Self check", onClick = session::runSelfCheck)
-                    DebugButton("Maintenance mode", onClick = session::enterMaintenance)
+                    DebugButton("Maintenance mode") { session.enterMaintenance() }
+                    // Reopen the app within 10 min to see S09 resume the saved session.
+                    DebugButton("S09 · Kill app (reopen it)") { Process.killProcess(Process.myPid()) }
 
                     Section("MACHINE")
                     DebugButton("S03/S02 · Machine fault") { machine.simulateFault(1) }
-                    DebugButton("S04 · Out of balls", enabled = state is SessionState.Running) {
-                        machine.simulateFault(3)
-                    }
-                    DebugButton(
-                        "S05 · Connection lost",
-                        enabled = state is SessionState.Running ||
-                            state is SessionState.BallsRequired ||
-                            state is SessionState.Reconnecting
-                    ) {
-                        val attempt = (state as? SessionState.Reconnecting)?.attempt?.plus(1) ?: 1
-                        machine.simulateConnectionLost(attempt)
-                    }
-                    DebugButton("Connection failed", onClick = machine::simulateConnectionFailed)
-                    DebugButton("Machine OK (reconnect / clear fault)", onClick = machine::simulateReconnected)
+                    DebugButton("S04 · Out of balls") { machine.simulateFault(3) }
+                    DebugButton("S05 · Connection lost (fails after 5 tries)", onClick = machine::simulateConnectionLost)
+                    DebugButton("Machine OK (reconnect / clear fault)", onClick = machine::simulateMachineOk)
 
                     val nextOutcome by payments.nextOutcome.collectAsState()
+                    val terminalReady by payments.ready.collectAsState()
                     Section("PAYMENT · next attempt: $nextOutcome")
                     DebugButton("S06 · Terminal timeout") { payments.setNextOutcome(Outcome.TIMEOUT) }
                     DebugButton("S07 · Cancelled on terminal") { payments.setNextOutcome(Outcome.CANCELLED) }
                     DebugButton("Card declined") { payments.setNextOutcome(Outcome.FAILED) }
                     DebugButton("S08 · Verification fails") { payments.setNextOutcome(Outcome.UNVERIFIED) }
+                    DebugButton(if (terminalReady) "S02 · Terminal offline" else "Terminal back online") {
+                        payments.setReady(!terminalReady)
+                    }
                 }
             }
         }

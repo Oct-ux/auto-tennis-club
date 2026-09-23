@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -45,22 +44,41 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autotennisclub.app.debug.DebugPanel
+import com.autotennisclub.app.machine.MachineState
 import com.autotennisclub.app.machine.MockPusunMachine
 import com.autotennisclub.app.payment.MockPaymentGateway
 import com.autotennisclub.app.session.CustomConfig
+import com.autotennisclub.app.session.ErrorEntry
+import com.autotennisclub.app.session.ErrorLog
 import com.autotennisclub.app.session.PaymentState
+import com.autotennisclub.app.session.RecoveryStep
 import com.autotennisclub.app.session.SessionController
+import com.autotennisclub.app.session.SessionDiagnostics
 import com.autotennisclub.app.session.SessionState
 import com.autotennisclub.app.session.TrainingMode
+import com.autotennisclub.app.session.TrainingOverlay
 import com.autotennisclub.app.session.UnavailableReason
+import com.autotennisclub.app.session.trainingOverlay
+import com.autotennisclub.app.station.PrefsErrorLogStore
+import com.autotennisclub.app.station.PrefsSessionStore
+import com.autotennisclub.app.station.StationState
+import com.autotennisclub.app.station.bluetoothOnFlow
+import com.autotennisclub.app.station.onlineFlow
+import com.autotennisclub.app.station.stationState
+import com.autotennisclub.app.ui.MaintenanceActions
+import com.autotennisclub.app.ui.MaintenanceScreen
+import com.autotennisclub.app.ui.PinDialog
+import com.autotennisclub.app.ui.StatusOverlay
+import com.autotennisclub.app.ui.StatusScreen
+import com.autotennisclub.app.ui.holdToOpen
 import com.autotennisclub.app.ui.theme.AutoTennisClubTheme
 import com.autotennisclub.app.ui.theme.BorderGray
 import com.autotennisclub.app.ui.theme.ErrorRed
@@ -79,13 +97,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Everything the customer screens can do; the defaults keep previews short. */
+data class SessionActions(
+    val onStart: () -> Unit = {},
+    val onTraining: (TrainingMode) -> Unit = {},
+    val onDuration: (Int) -> Unit = {},
+    val onCustomConfig: (CustomConfig) -> Unit = {},
+    val onConfirmCustom: () -> Unit = {},
+    val onPayment: () -> Unit = {},
+    val onPay: () -> Unit = {},
+    val onRetryPayment: () -> Unit = {},
+    val onCancelPayment: () -> Unit = {},
+    val onStartPaid: () -> Unit = {},
+    val onStop: () -> Unit = {},
+    val onFinish: () -> Unit = {},
+    val onBallsReturned: () -> Unit = {},
+    val onSelfCheck: () -> Unit = {},
+    /** Hidden 5-second hold on the logo or a status title: opens the operator PIN. */
+    val onOperatorAccess: () -> Unit = {}
+)
+
 @Composable
 fun AutoTennisClubApp() {
+    val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
     val machine = remember { MockPusunMachine(scope) }
     val payments = remember { MockPaymentGateway() }
-    val session = remember { SessionController(scope, machine, payments) }
-    val state by session.state.collectAsState()
+    val errors = remember { ErrorLog(PrefsErrorLogStore(context)) }
+    val session = remember { SessionController(scope, machine, payments, PrefsSessionStore(context), errors) }
+    val station = remember {
+        stationState(
+            scope, session, machine, payments.providerName, errors,
+            online = context.onlineFlow(),
+            bluetoothOn = context.bluetoothOnFlow()
+        )
+    }
+    val state by station.collectAsState()
+    var askPin by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -94,30 +142,48 @@ fun AutoTennisClubApp() {
         }
     }
 
+    val actions = remember(session) {
+        SessionActions(
+            onStart = session::start,
+            onTraining = session::selectTraining,
+            onDuration = session::selectDuration,
+            onCustomConfig = session::updateCustomConfig,
+            onConfirmCustom = session::confirmCustomConfig,
+            onPayment = session::proceedToPayment,
+            onPay = session::pay,
+            onRetryPayment = session::retryPayment,
+            onCancelPayment = session::cancelPayment,
+            onStartPaid = session::startPaidSession,
+            onStop = session::stopSession,
+            onFinish = session::reset,
+            onBallsReturned = session::confirmBallsReturned,
+            onSelfCheck = session::runSelfCheck,
+            onOperatorAccess = { askPin = true }
+        )
+    }
+    val maintenanceActions = remember(session) {
+        MaintenanceActions(
+            onClose = session::exitMaintenance,
+            onResetStation = session::resetStation,
+            onReconnect = session::reconnectMachine,
+            onTestPayment = session::testPayment,
+            onEndSession = session::endSavedSession,
+            onMachineTest = session::runMachineTest,
+            onSimulateFault = { machine.simulateFault(1) }
+        )
+    }
+
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         Box(Modifier.fillMaxSize()) {
-            SessionUi(
-                state = state,
-                onStart = session::start,
-                onTraining = session::selectTraining,
-                onDuration = session::selectDuration,
-                onCustomConfig = session::updateCustomConfig,
-                onConfirmCustom = session::confirmCustomConfig,
-                onPayment = session::proceedToPayment,
-                onPay = session::pay,
-                onRetryPayment = session::retryPayment,
-                onCancelPayment = session::cancelPayment,
-                onStartPaid = session::startPaidSession,
-                onStop = session::stopSession,
-                onFinish = session::reset,
-                onBallsReturned = session::confirmBallsReturned,
-                onSelfCheck = session::runSelfCheck,
-                onExitMaintenance = session::exitMaintenance,
-                modifier = Modifier.fillMaxSize().padding(padding)
-            )
+            val content = Modifier.fillMaxSize().padding(padding)
+            if (state.maintenance) {
+                MaintenanceScreen(state, maintenanceActions, content)
+            } else {
+                SessionUi(state.session, actions, BuildConfig.SUPPORT_CONTACT, content)
+            }
             if (BuildConfig.DEBUG) {
                 DebugPanel(
-                    state = state,
+                    state = state.session,
                     session = session,
                     machine = machine,
                     payments = payments,
@@ -126,54 +192,57 @@ fun AutoTennisClubApp() {
             }
         }
     }
+
+    if (askPin) {
+        PinDialog(
+            expectedPin = BuildConfig.OPERATOR_PIN,
+            onDismiss = { askPin = false },
+            onSuccess = {
+                askPin = false
+                session.enterMaintenance()
+            }
+        )
+    }
 }
 
 @Composable
-private fun SessionUi(
-    state: SessionState,
-    onStart: () -> Unit,
-    onTraining: (TrainingMode) -> Unit,
-    onDuration: (Int) -> Unit,
-    onCustomConfig: (CustomConfig) -> Unit,
-    onConfirmCustom: () -> Unit,
-    onPayment: () -> Unit,
-    onPay: () -> Unit,
-    onRetryPayment: () -> Unit,
-    onCancelPayment: () -> Unit,
-    onStartPaid: () -> Unit,
-    onStop: () -> Unit,
-    onFinish: () -> Unit,
-    onBallsReturned: () -> Unit,
-    onSelfCheck: () -> Unit,
-    onExitMaintenance: () -> Unit,
-    modifier: Modifier
-) {
+private fun SessionUi(state: SessionState, actions: SessionActions, supportContact: String, modifier: Modifier) {
+    val overlay = state.trainingOverlay
+    if (overlay != null) {
+        TrainingWithOverlay(state, overlay, actions, supportContact, modifier)
+        return
+    }
     when (state) {
         SessionState.StartingUp -> StatusScreen(
             label = "S01", title = "STATION STARTUP", icon = "✓",
             heading = "Starting station...",
             body = "Checking tablet, application, network, Bluetooth, machine and payment readiness.",
+            onTitleHold = actions.onOperatorAccess,
             modifier = modifier
         )
         is SessionState.Unavailable -> StatusScreen(
             label = "S02", title = "STATION UNAVAILABLE", icon = "!",
             heading = "Station temporarily unavailable",
             body = "This station is currently unavailable. Please try again later.",
-            action = "TRY AGAIN" to onSelfCheck,
+            action = "TRY AGAIN" to actions.onSelfCheck,
+            onTitleHold = actions.onOperatorAccess,
             modifier = modifier
         )
         is SessionState.MachineFault -> StatusScreen(
             label = "S03", title = "MACHINE ERROR", icon = "!",
             heading = "Machine error detected",
             body = "The training machine has detected an error. Please wait while we check the station.",
-            action = "TRY AGAIN" to onSelfCheck,
+            action = "TRY AGAIN" to actions.onSelfCheck,
+            footnote = faultFootnote(state.reference, supportContact),
+            onTitleHold = actions.onOperatorAccess,
             modifier = modifier
         )
+        // Shown over the timer by TrainingWithOverlay; full screens kept as a fallback.
         is SessionState.BallsRequired -> StatusScreen(
             label = "S04", title = "BALLS NEEDED", icon = "●",
             heading = "Return the balls to the machine",
             body = "Collect the balls and return them to the machine to continue. Your session is paused.",
-            action = "I’VE RETURNED THE BALLS" to onBallsReturned,
+            action = "I’VE RETURNED THE BALLS" to actions.onBallsReturned,
             modifier = modifier
         )
         is SessionState.Reconnecting -> StatusScreen(
@@ -186,14 +255,17 @@ private fun SessionUi(
             label = "S09", title = "SESSION INTERRUPTED", icon = null,
             heading = "Recovering session",
             body = "We're checking payment, machine and timer status before continuing.",
+            footnote = recoveryProgress(state.step),
+            onTitleHold = actions.onOperatorAccess,
             modifier = modifier
         )
-        SessionState.Maintenance -> MaintenanceScreen(onExitMaintenance, modifier)
-        SessionState.Idle -> HomeScreen(onStart, modifier)
-        SessionState.TrainingSelection -> TrainingSelectionScreen(onTraining, modifier)
-        is SessionState.DurationSelection -> DurationSelectionScreen(onDuration, modifier)
-        is SessionState.CustomConfigState -> CustomConfigScreen(state, onCustomConfig, onConfirmCustom, modifier)
-        is SessionState.Summary -> SummaryScreen(state, onPayment, modifier)
+        SessionState.Maintenance -> Unit
+        SessionState.Idle -> HomeScreen(actions.onStart, actions.onOperatorAccess, modifier)
+        SessionState.TrainingSelection -> TrainingSelectionScreen(actions.onTraining, modifier)
+        is SessionState.DurationSelection -> DurationSelectionScreen(actions.onDuration, modifier)
+        is SessionState.CustomConfigState ->
+            CustomConfigScreen(state, actions.onCustomConfig, actions.onConfirmCustom, modifier)
+        is SessionState.Summary -> SummaryScreen(state, actions.onPayment, modifier)
         is SessionState.Payment -> when (state.status) {
             PaymentState.VERIFYING -> StatusScreen(
                 label = "S08", title = "VERIFYING PAYMENT", icon = "●",
@@ -205,30 +277,100 @@ private fun SessionUi(
                 label = "S06", title = "PAYMENT TIMEOUT", icon = "!",
                 heading = "Payment terminal did not respond",
                 body = "We didn't receive a response from the payment terminal. Please try again.",
-                action = "TRY AGAIN" to onRetryPayment,
+                action = "TRY AGAIN" to actions.onRetryPayment,
                 modifier = modifier
             )
             PaymentState.CANCELLED -> StatusScreen(
                 label = "S07", title = "PAYMENT CANCELLED", icon = "!",
                 heading = "Payment cancelled",
                 body = "The payment was cancelled. No completed payment should be treated as successful.",
-                action = "TRY AGAIN" to onRetryPayment,
+                action = "TRY AGAIN" to actions.onRetryPayment,
                 modifier = modifier
             )
-            else -> PaymentScreen(state, onPay, onRetryPayment, onCancelPayment, onStartPaid, modifier)
+            else -> PaymentScreen(
+                state, actions.onPay, actions.onRetryPayment, actions.onCancelPayment, actions.onStartPaid, modifier
+            )
         }
         SessionState.Preparing -> PreparingScreen(modifier)
         is SessionState.Countdown -> CountdownScreen(state.seconds, modifier)
-        is SessionState.Running -> TrainingScreen(state.remainingSeconds, state.mode, onStop, modifier)
-        is SessionState.Complete -> CompleteScreen(state.minutes, state.mode, onFinish, modifier)
+        is SessionState.Running -> TrainingScreen(state.remainingSeconds, state.mode, actions.onStop, modifier)
+        is SessionState.Complete -> CompleteScreen(state.minutes, state.mode, actions.onFinish, modifier)
     }
 }
 
+/** Figma 09 overlay model: the paused timer stays visible under S03 / S04 / S05 / S09. */
 @Composable
-private fun HomeScreen(onStart: () -> Unit, modifier: Modifier) {
+private fun TrainingWithOverlay(
+    state: SessionState,
+    overlay: TrainingOverlay,
+    actions: SessionActions,
+    supportContact: String,
+    modifier: Modifier
+) {
+    val (remaining, mode) = when (state) {
+        is SessionState.BallsRequired -> state.remainingSeconds to state.mode
+        is SessionState.Reconnecting -> state.remainingSeconds to state.mode
+        is SessionState.Recovering -> state.remainingSeconds to state.mode
+        is SessionState.MachineFault -> (state.remainingSeconds ?: 0L) to (state.mode ?: TrainingMode.BASIC)
+        else -> 0L to TrainingMode.BASIC
+    }
+    Box(modifier.fillMaxSize()) {
+        TrainingScreen(remaining, mode, onStop = {}, modifier = Modifier.fillMaxSize(), paused = true)
+        when (overlay) {
+            TrainingOverlay.OUT_OF_BALLS -> StatusOverlay(
+                icon = "●",
+                heading = "Return the balls to the machine",
+                body = "Collect the balls and return them to the machine to continue. Your session is paused.",
+                action = "I’VE RETURNED THE BALLS" to actions.onBallsReturned
+            )
+            TrainingOverlay.CONNECTION_LOST -> StatusOverlay(
+                icon = "●",
+                heading = "Reconnecting to machine...",
+                body = "Your session is paused while we try to restore the Bluetooth connection.",
+                footnote = (state as? SessionState.Reconnecting)?.let { "Attempt ${it.attempt}" }
+            )
+            TrainingOverlay.MACHINE_FAULT -> StatusOverlay(
+                icon = "!",
+                heading = "Machine error detected",
+                body = "The training machine has detected an error. Please wait while we check the station.",
+                action = "TRY AGAIN" to actions.onSelfCheck,
+                footnote = faultFootnote((state as? SessionState.MachineFault)?.reference, supportContact)
+            )
+            TrainingOverlay.RECOVERING -> StatusOverlay(
+                icon = null,
+                heading = "Recovering session",
+                body = "We're checking payment, machine and timer status before continuing.",
+                footnote = (state as? SessionState.Recovering)?.let { recoveryProgress(it.step) }
+            )
+        }
+    }
+}
+
+/** Operator notice on S03: the unused time is logged under this reference. */
+private fun faultFootnote(reference: String?, supportContact: String): String? =
+    listOfNotNull(
+        reference?.let { "Unused time recorded · Reference $it" },
+        supportContact.takeIf { it.isNotBlank() }?.let { "Staff: $it" }
+    ).joinToString(" · ").ifEmpty { null }
+
+private fun recoveryProgress(step: RecoveryStep): String {
+    fun mark(done: Boolean) = if (done) "✓" else "…"
+    return "Payment ${mark(step >= RecoveryStep.PAYMENT_VERIFIED)}   " +
+        "Machine ${mark(step >= RecoveryStep.MACHINE_VERIFIED)}   " +
+        "Timer ${mark(step >= RecoveryStep.TIMER_VERIFIED)}"
+}
+
+@Composable
+private fun HomeScreen(onStart: () -> Unit, onOperatorAccess: () -> Unit, modifier: Modifier) {
     Box(modifier.fillMaxSize()) {
         Centered(Modifier.fillMaxSize()) {
-            Text("AUTO TENNIS CLUB", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = GreenDark)
+            Text(
+                "AUTO TENNIS CLUB",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = GreenDark,
+                modifier = Modifier.holdToOpen(onHold = onOperatorAccess)
+            )
             Spacer(Modifier.height(16.dp))
             Text("PLAY • IMPROVE • ENJOY", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Navy)
             Spacer(Modifier.height(16.dp))
@@ -589,78 +731,6 @@ private fun PaymentScreen(
     }
 }
 
-/** Phase 4.5 production / error state card (Figma S01–S09). */
-@Composable
-private fun StatusScreen(
-    label: String,
-    title: String,
-    icon: String?,
-    heading: String,
-    body: String,
-    modifier: Modifier,
-    action: Pair<String, () -> Unit>? = null
-) {
-    Box(modifier.fillMaxSize()) {
-        Column(Modifier.padding(start = 32.dp, top = 24.dp)) {
-            Text(label, fontSize = 12.sp, color = Green)
-            Spacer(Modifier.height(8.dp))
-            Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Navy)
-        }
-        Card(
-            modifier = Modifier.align(Alignment.Center).width(680.dp).height(450.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(1.dp, BorderGray)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 90.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                if (icon != null) {
-                    Text(icon, fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Navy)
-                    Spacer(Modifier.height(16.dp))
-                }
-                Text(heading, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Navy, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(20.dp))
-                Text(body, fontSize = 17.sp, color = Navy.copy(alpha = 0.78f), textAlign = TextAlign.Center)
-                Spacer(Modifier.height(32.dp))
-                if (action != null) {
-                    Button(
-                        onClick = action.second,
-                        modifier = Modifier.width(340.dp).height(58.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text(action.first, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    CircularProgressIndicator(color = Green, modifier = Modifier.size(46.dp))
-                }
-            }
-        }
-        Text(
-            "PHASE 4.5 · PRODUCTION / ERROR STATE",
-            fontSize = 13.sp,
-            color = Navy,
-            modifier = Modifier.align(Alignment.BottomStart).padding(32.dp)
-        )
-    }
-}
-
-/** Operator-only layer. Diagnostics and machine tests come with hardware integration. */
-@Composable
-private fun MaintenanceScreen(onExit: () -> Unit, modifier: Modifier) {
-    Centered(modifier) {
-        Text("MAINTENANCE MODE", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Navy)
-        Spacer(Modifier.height(8.dp))
-        Text("OPERATOR ONLY · NOT PART OF CUSTOMER FLOW", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Green)
-        Spacer(Modifier.height(32.dp))
-        Button(onClick = onExit, modifier = Modifier.width(270.dp).height(58.dp)) {
-            Text("RESET STATION")
-        }
-    }
-}
-
 @Composable
 private fun PreparingScreen(modifier: Modifier) {
     Centered(modifier) {
@@ -682,7 +752,13 @@ private fun CountdownScreen(seconds: Int, modifier: Modifier) {
 }
 
 @Composable
-private fun TrainingScreen(remainingSeconds: Long, mode: TrainingMode, onStop: () -> Unit, modifier: Modifier) {
+private fun TrainingScreen(
+    remainingSeconds: Long,
+    mode: TrainingMode,
+    onStop: () -> Unit,
+    modifier: Modifier,
+    paused: Boolean = false
+) {
     val minutes = remainingSeconds / 60
     val seconds = remainingSeconds % 60
     Box(modifier.fillMaxSize()) {
@@ -691,7 +767,12 @@ private fun TrainingScreen(remainingSeconds: Long, mode: TrainingMode, onStop: (
             Spacer(Modifier.height(24.dp))
             Text("%02d:%02d".format(minutes, seconds), style = MaterialTheme.typography.displayLarge)
             Spacer(Modifier.height(8.dp))
-            Text("TIME REMAINING", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+            Text(
+                if (paused) "PAUSED" else "TIME REMAINING",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextSecondary
+            )
             Spacer(Modifier.height(16.dp))
             Text(modeLabel(mode), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GreenDark)
             Spacer(Modifier.height(32.dp))
@@ -699,7 +780,10 @@ private fun TrainingScreen(remainingSeconds: Long, mode: TrainingMode, onStop: (
                 Text("STOP")
             }
         }
-        StatusBadge("MACHINE ACTIVE", modifier = Modifier.align(Alignment.BottomStart).padding(24.dp))
+        StatusBadge(
+            if (paused) "MACHINE PAUSED" else "MACHINE ACTIVE",
+            modifier = Modifier.align(Alignment.BottomStart).padding(24.dp)
+        )
     }
 }
 
@@ -736,19 +820,20 @@ private fun Centered(modifier: Modifier, content: @Composable ColumnScope.() -> 
     )
 }
 
-/** Phase 4.5 production / error states (Figma S01–S09 + Maintenance). */
+/** Phase 4.5 production / error states (Figma S01–S09), full screen and over the timer. */
 private class PhaseStatesProvider : PreviewParameterProvider<SessionState> {
     override val values = sequenceOf(
         SessionState.StartingUp,
         SessionState.Unavailable(UnavailableReason.MACHINE_FAULT),
-        SessionState.MachineFault("WHEEL_PROTECTION", 1),
-        SessionState.BallsRequired(600, TrainingMode.BASIC),
-        SessionState.Reconnecting(600, TrainingMode.BASIC, attempt = 1),
+        SessionState.MachineFault("WHEEL_PROTECTION", 1, reference = "3F2A9C1E"),
+        SessionState.MachineFault("WHEEL_PROTECTION", 1, "3F2A9C1E", remainingSeconds = 754, mode = TrainingMode.BASIC),
+        SessionState.BallsRequired(754, TrainingMode.BASIC),
+        SessionState.Reconnecting(754, TrainingMode.BASIC, attempt = 2),
         SessionState.Payment(TrainingMode.BASIC, 30, 12.0, PaymentState.TIMEOUT),
         SessionState.Payment(TrainingMode.BASIC, 30, 12.0, PaymentState.CANCELLED),
         SessionState.Payment(TrainingMode.BASIC, 30, 12.0, PaymentState.VERIFYING),
-        SessionState.Recovering(600, TrainingMode.BASIC),
-        SessionState.Maintenance
+        SessionState.Recovering(RecoveryStep.PAYMENT_VERIFIED, 754, TrainingMode.BASIC, afterRestart = true),
+        SessionState.Recovering(RecoveryStep.MACHINE_VERIFIED, 754, TrainingMode.BASIC)
     )
 }
 
@@ -756,24 +841,28 @@ private class PhaseStatesProvider : PreviewParameterProvider<SessionState> {
 @Composable
 private fun PhaseStatesPreview(@PreviewParameter(PhaseStatesProvider::class) state: SessionState) {
     AutoTennisClubTheme {
-        SessionUi(
-            state = state,
-            onStart = {},
-            onTraining = {},
-            onDuration = {},
-            onCustomConfig = {},
-            onConfirmCustom = {},
-            onPayment = {},
-            onPay = {},
-            onRetryPayment = {},
-            onCancelPayment = {},
-            onStartPaid = {},
-            onStop = {},
-            onFinish = {},
-            onBallsReturned = {},
-            onSelfCheck = {},
-            onExitMaintenance = {},
-            modifier = Modifier.fillMaxSize()
+        SessionUi(state, SessionActions(), supportContact = "+34 600 000 000", modifier = Modifier.fillMaxSize())
+    }
+}
+
+@Preview(widthDp = 1280, heightDp = 800, showBackground = true)
+@Composable
+private fun MaintenancePreview() {
+    AutoTennisClubTheme {
+        MaintenanceScreen(
+            StationState(
+                session = SessionState.Maintenance,
+                machine = MachineState.Ready,
+                paymentProvider = "MOCK",
+                sessionDiagnostics = SessionDiagnostics(paymentReady = true, lastPayment = PaymentState.SUCCESS),
+                online = true,
+                bluetoothOn = true,
+                errors = listOf(
+                    ErrorEntry(1_790_000_000_000, "MACHINE_FAULT", "WHEEL_PROTECTION ref=3f2a9c1e paid=true unused=12:34")
+                )
+            ),
+            MaintenanceActions(),
+            Modifier.fillMaxSize()
         )
     }
 }

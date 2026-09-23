@@ -9,16 +9,53 @@ import com.autotennisclub.app.pusun.PusunNotificationParser
 import com.autotennisclub.app.pusun.SpinType
 import com.autotennisclub.app.pusun.StartMode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-class MachineController(scope: CoroutineScope, gatt: BleGatt) : TennisMachine {
+/**
+ * PUSUN MAX B over BLE. Owns the link: connects, and when the link drops
+ * unexpectedly retries [maxReconnectAttempts] times (Figma S05) before
+ * reporting ConnectionFailed.
+ */
+class MachineController(
+    private val scope: CoroutineScope,
+    private val gatt: BleGatt,
+    private val maxReconnectAttempts: Int = 5,
+    private val reconnectDelayMillis: Long = 2_000,
+    private val clock: () -> Long = System::currentTimeMillis
+) : TennisMachine {
     private val queue = PusunCommandQueue(scope, gatt)
+
     private val _state = MutableStateFlow<MachineState>(MachineState.Disconnected)
     override val state: StateFlow<MachineState> = _state.asStateFlow()
 
-    fun connected() { _state.value = MachineState.Connected }
+    private val _diagnostics = MutableStateFlow(MachineDiagnostics())
+    override val diagnostics: StateFlow<MachineDiagnostics> = _diagnostics.asStateFlow()
+
+    private var wantConnected = false
+    private var reconnectJob: Job? = null
+
+    init {
+        scope.launch { gatt.notifications.collect(::onNotification) }
+        scope.launch {
+            gatt.connected.collect { up ->
+                if (!up && wantConnected && isLinked(_state.value)) reconnect()
+            }
+        }
+    }
+
+    override suspend fun connect() {
+        wantConnected = true
+        val current = _state.value
+        if (current != MachineState.Disconnected && current != MachineState.ConnectionFailed) return
+        _state.value = MachineState.Connecting
+        _state.value = if (gatt.connect()) MachineState.Connected else MachineState.ConnectionFailed
+    }
 
     override suspend fun configure(
         velocity: Int,
@@ -43,20 +80,57 @@ class MachineController(scope: CoroutineScope, gatt: BleGatt) : TennisMachine {
         _state.value = MachineState.Ready
     }
 
-    fun onNotification(frame: ByteArray) {
-        val notification = PusunNotificationParser.parse(frame)
-        if (notification is PusunNotification.Fault) {
-            _state.value = if (notification.type == FaultType.NO_BALLS) {
-                MachineState.OutOfBalls
-            } else {
-                MachineState.Fault(notification.code, notification.type.name)
+    override suspend fun reset() {
+        queue.enqueue(PusunCommand.Stop)
+        _state.value = if (gatt.connected.value) MachineState.Connected else MachineState.Disconnected
+    }
+
+    fun shutdown() {
+        wantConnected = false
+        reconnectJob?.cancel()
+        queue.close()
+        gatt.disconnect()
+        _state.value = MachineState.Disconnected
+    }
+
+    private fun reconnect() {
+        if (reconnectJob?.isActive == true) return
+        reconnectJob = scope.launch {
+            for (attempt in 1..maxReconnectAttempts) {
+                _state.value = MachineState.Reconnecting(attempt)
+                delay(reconnectDelayMillis)
+                if (gatt.connect()) {
+                    _state.value = MachineState.Ready
+                    return@launch
+                }
             }
+            _state.value = MachineState.ConnectionFailed
         }
     }
 
-    fun reconnecting(attempt: Int) { _state.value = MachineState.Reconnecting(attempt) }
+    private fun onNotification(frame: ByteArray) {
+        val notification = PusunNotificationParser.parse(frame) ?: return
+        _diagnostics.update { it.copy(lastResponseAtMillis = clock()) }
+        when (notification) {
+            is PusunNotification.Fault -> {
+                _diagnostics.update { it.copy(lastFault = notification.type.name) }
+                _state.value = if (notification.type == FaultType.NO_BALLS) {
+                    MachineState.OutOfBalls
+                } else {
+                    MachineState.Fault(notification.code, notification.type.name)
+                }
+            }
+            is PusunNotification.Battery ->
+                _diagnostics.update { it.copy(batteryPercent = notification.percentage) }
+            is PusunNotification.Unknown -> Unit
+        }
+    }
 
-    fun connectionFailed() { _state.value = MachineState.ConnectionFailed }
-
-    fun disconnected() { _state.value = MachineState.Disconnected }
+    private fun isLinked(state: MachineState): Boolean = when (state) {
+        MachineState.Disconnected,
+        MachineState.Connecting,
+        MachineState.ConnectionFailed,
+        is MachineState.Reconnecting -> false
+        else -> true
+    }
 }

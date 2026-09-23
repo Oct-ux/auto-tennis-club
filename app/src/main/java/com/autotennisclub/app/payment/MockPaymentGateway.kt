@@ -15,8 +15,16 @@ class MockPaymentGateway(
 ) : PaymentGateway {
     enum class Outcome { SUCCESS, FAILED, CANCELLED, TIMEOUT, UNVERIFIED }
 
+    override val providerName: String = "MOCK"
+
     private val _nextOutcome = MutableStateFlow(Outcome.SUCCESS)
     val nextOutcome: StateFlow<Outcome> = _nextOutcome.asStateFlow()
+
+    private val _ready = MutableStateFlow(true)
+    val ready: StateFlow<Boolean> = _ready.asStateFlow()
+
+    /** Answer for [lookup]; null means "paid", as if the provider had the charge. */
+    var lookupOverride: PaymentLookup? = null
 
     private val unverified = mutableSetOf<String>()
 
@@ -28,6 +36,12 @@ class MockPaymentGateway(
     fun setNextOutcome(outcome: Outcome) {
         _nextOutcome.value = outcome
     }
+
+    fun setReady(ready: Boolean) {
+        _ready.value = ready
+    }
+
+    override suspend fun checkReady(): Boolean = _ready.value
 
     override suspend fun startPayment(amountCents: Long, reference: String): PaymentResult {
         lastAmountCents = amountCents
@@ -53,4 +67,7 @@ class MockPaymentGateway(
         delay(verifyingMillis)
         return transactionId !in unverified
     }
+
+    override suspend fun lookup(reference: String): PaymentLookup =
+        lookupOverride ?: PaymentLookup.Paid("mock-$reference")
 }
