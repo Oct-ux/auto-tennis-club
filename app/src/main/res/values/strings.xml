@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Auto Tennis Club.</string>
+    <string name="app_name" translatable="false">Auto Tennis Club</string>
 
     <!-- Home -->
     <string name="home_tagline">PLAY • IMPROVE • ENJOY</string>
@@ -80,7 +80,7 @@
     <string name="s06_heading">Payment terminal did not respond</string>
     <string name="s06_body">We didn\'t receive a response from the payment terminal. Please try again.</string>
     <string name="s07_heading">Payment cancelled</string>
-    <string name="s07_body">The payment was cancelled. No completed payment should be treated as successful.</string>
+    <string name="s07_body">The payment was cancelled.</string>
     <string name="s08_heading">Please wait</string>
     <string name="s08_body">We\'re verifying your payment. Do not pay again while verification is in progress.</string>
     <string name="s09_heading">Recovering session</string>
