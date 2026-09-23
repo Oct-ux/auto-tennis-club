@@ -1,3 +1,92 @@
 <resources>
-    <string name="app_name">Auto Tennis Club.</string>
+    <string name="app_name" translatable="false">Auto Tennis Club.</string>
+
+    <!-- Home -->
+    <string name="home_tagline">PLAY • IMPROVE • ENJOY</string>
+    <string name="home_subtitle">Your private training session starts here.</string>
+    <string name="start">START</string>
+    <string name="station_ready">STATION READY</string>
+
+    <!-- Selection -->
+    <string name="choose_training">CHOOSE YOUR TRAINING</string>
+    <string name="mode_basic">BASIC</string>
+    <string name="mode_training">TRAINING</string>
+    <string name="mode_custom">CUSTOM</string>
+    <string name="continue_button">CONTINUE</string>
+    <string name="choose_duration">CHOOSE DURATION</string>
+    <string name="minutes_short">%1$d MIN</string>
+
+    <!-- Custom configuration -->
+    <string name="custom_training">CUSTOM TRAINING</string>
+    <string name="speed">SPEED</string>
+    <string name="frequency">FREQUENCY</string>
+    <string name="spin">SPIN</string>
+    <string name="spin_none">NONE</string>
+    <string name="spin_topspin">TOPSPIN</string>
+    <string name="spin_backspin">BACKSPIN</string>
+    <string name="sequence_mode">SEQUENCE MODE</string>
+    <string name="sequence_fixed">FIXED POINT</string>
+    <string name="sequence_rotate">ROTATE POINTS</string>
+    <string name="config_not_paid">Configuration time is NOT part of your paid session.</string>
+    <string name="confirm">CONFIRM</string>
+
+    <!-- Summary -->
+    <string name="session_summary">SESSION SUMMARY</string>
+    <string name="custom_summary">CUSTOM SUMMARY</string>
+    <string name="label_training">TRAINING</string>
+    <string name="label_duration">DURATION</string>
+    <string name="label_price">PRICE</string>
+    <string name="summary_config">%1$d km/h · %2$s</string>
+    <string name="proceed_to_payment">PROCEED TO PAYMENT</string>
+
+    <!-- Payment -->
+    <string name="tap_card">TAP YOUR CARD OR PHONE</string>
+    <string name="cancel_payment">CANCEL PAYMENT</string>
+    <string name="processing_payment">PROCESSING PAYMENT…</string>
+    <string name="payment_successful">PAYMENT SUCCESSFUL</string>
+    <string name="preparing_training">Preparing your training…</string>
+    <string name="payment_not_completed">PAYMENT NOT COMPLETED</string>
+    <string name="try_again_sentence">Try again.</string>
+    <string name="try_again">TRY AGAIN</string>
+
+    <!-- Session -->
+    <string name="connecting_machine">Connecting to machine…</string>
+    <string name="get_ready">GET READY</string>
+    <string name="starts_automatically">Training starts automatically</string>
+    <string name="training_session">TRAINING SESSION</string>
+    <string name="time_remaining">TIME REMAINING</string>
+    <string name="paused">PAUSED</string>
+    <string name="stop">STOP</string>
+    <string name="machine_active">MACHINE ACTIVE</string>
+    <string name="machine_paused">MACHINE PAUSED</string>
+    <string name="session_complete">SESSION COMPLETE</string>
+    <string name="great_training">Great training!</string>
+    <string name="finish">FINISH</string>
+
+    <!-- Phase 4.5 states (Figma S01–S09) -->
+    <string name="s01_heading">Starting station…</string>
+    <string name="s01_body">Checking tablet, application, network, Bluetooth, machine and payment readiness.</string>
+    <string name="s02_heading">Station temporarily unavailable</string>
+    <string name="s02_body">This station is currently unavailable. Please try again later.</string>
+    <string name="s03_heading">Machine error detected</string>
+    <string name="s03_body">The training machine has detected an error. Please wait while we check the station.</string>
+    <string name="s03_reference">Unused time recorded · Reference %1$s</string>
+    <string name="staff_contact">Staff: %1$s</string>
+    <string name="s04_heading">Return the balls to the machine</string>
+    <string name="s04_body">Collect the balls and return them to the machine to continue. Your session is paused.</string>
+    <string name="s04_action">I’VE RETURNED THE BALLS</string>
+    <string name="s05_heading">Reconnecting to machine…</string>
+    <string name="s05_body">Your session is paused while we try to restore the Bluetooth connection.</string>
+    <string name="s05_attempt">Attempt %1$d</string>
+    <string name="s06_heading">Payment terminal did not respond</string>
+    <string name="s06_body">We didn\'t receive a response from the payment terminal. Please try again.</string>
+    <string name="s07_heading">Payment cancelled</string>
+    <string name="s07_body">The payment was cancelled. No completed payment should be treated as successful.</string>
+    <string name="s08_heading">Please wait</string>
+    <string name="s08_body">We\'re verifying your payment. Do not pay again while verification is in progress.</string>
+    <string name="s09_heading">Recovering session</string>
+    <string name="s09_body">We\'re checking payment, machine and timer status before continuing.</string>
+    <string name="recovery_payment">Payment</string>
+    <string name="recovery_machine">Machine</string>
+    <string name="recovery_timer">Timer</string>
 </resources>

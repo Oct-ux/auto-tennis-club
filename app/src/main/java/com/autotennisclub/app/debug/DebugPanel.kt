@@ -47,6 +47,8 @@ fun DebugPanel(
     session: SessionController,
     machine: MockPusunMachine,
     payments: MockPaymentGateway,
+    kioskSetUp: Boolean,
+    onRemoveKiosk: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var open by remember { mutableStateOf(false) }
@@ -74,6 +76,8 @@ fun DebugPanel(
                     DebugButton("Maintenance mode") { session.enterMaintenance() }
                     // Reopen the app within 10 min to see S09 resume the saved session.
                     DebugButton("S09 · Kill app (reopen it)") { Process.killProcess(Process.myPid()) }
+                    // Undoes `dpm set-device-owner` on a development device.
+                    DebugButton("Kiosk · remove device owner", enabled = kioskSetUp, onClick = onRemoveKiosk)
 
                     Section("MACHINE")
                     DebugButton("S03/S02 · Machine fault") { machine.simulateFault(1) }

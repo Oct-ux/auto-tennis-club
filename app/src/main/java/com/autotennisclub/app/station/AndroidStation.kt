@@ -2,9 +2,12 @@ package com.autotennisclub.app.station
 
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.core.content.edit
+import com.autotennisclub.app.kiosk.Kiosk
+import com.autotennisclub.app.kiosk.bluetoothPermissions
 import com.autotennisclub.app.session.ActiveSession
 import com.autotennisclub.app.session.CustomConfig
 import com.autotennisclub.app.session.ErrorEntry
@@ -17,24 +20,27 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 
 /** Polled rather than callback-based: the operator panel only needs a few seconds of freshness. */
-private fun polling(intervalMillis: Long = 3_000, read: () -> Boolean): Flow<Boolean> = flow {
-    while (true) {
-        emit(runCatching(read).getOrDefault(false))
-        delay(intervalMillis)
-    }
-}.distinctUntilChanged()
-
-fun Context.onlineFlow(): Flow<Boolean> {
+fun Context.deviceStatusFlow(intervalMillis: Long = 3_000): Flow<DeviceStatus> {
     val connectivity = getSystemService(ConnectivityManager::class.java)
-    return polling {
-        connectivity.getNetworkCapabilities(connectivity.activeNetwork)
-            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    }
-}
-
-fun Context.bluetoothOnFlow(): Flow<Boolean> {
     val adapter = getSystemService(BluetoothManager::class.java)?.adapter
-    return polling { adapter?.isEnabled == true }
+    return flow {
+        while (true) {
+            emit(
+                DeviceStatus(
+                    online = runCatching {
+                        connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+                            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+                    }.getOrDefault(false),
+                    bluetoothOn = runCatching { adapter?.isEnabled == true }.getOrDefault(false),
+                    bluetoothPermission = bluetoothPermissions().all {
+                        checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+                    },
+                    kiosk = Kiosk.status(this@deviceStatusFlow)
+                )
+            )
+            delay(intervalMillis)
+        }
+    }.distinctUntilChanged()
 }
 
 /** Saved with commit(): the paid session must be on disk before the app can die. */

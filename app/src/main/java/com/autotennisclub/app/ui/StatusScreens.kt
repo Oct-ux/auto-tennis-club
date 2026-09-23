@@ -49,28 +49,16 @@ import com.autotennisclub.app.ui.theme.TextSecondary
 /** Phase 4.5 production / error state card (Figma S01–S09). */
 @Composable
 internal fun StatusScreen(
-    label: String,
-    title: String,
     icon: String?,
     heading: String,
     body: String,
     modifier: Modifier,
     action: Pair<String, () -> Unit>? = null,
     footnote: String? = null,
-    onTitleHold: (() -> Unit)? = null
+    /** Hidden operator access on stuck screens (S01, S02, S03, S09). */
+    onHeadingHold: (() -> Unit)? = null
 ) {
     Box(modifier.fillMaxSize()) {
-        Column(Modifier.padding(start = 32.dp, top = 24.dp)) {
-            Text(label, fontSize = 12.sp, color = Green)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                title,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Navy,
-                modifier = if (onTitleHold != null) Modifier.holdToOpen(onHold = onTitleHold) else Modifier
-            )
-        }
         Card(
             modifier = Modifier.align(Alignment.Center).width(680.dp).height(450.dp),
             shape = RoundedCornerShape(12.dp),
@@ -86,7 +74,14 @@ internal fun StatusScreen(
                     Text(icon, fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Navy)
                     Spacer(Modifier.height(16.dp))
                 }
-                Text(heading, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Navy, textAlign = TextAlign.Center)
+                Text(
+                    heading,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Navy,
+                    textAlign = TextAlign.Center,
+                    modifier = if (onHeadingHold != null) Modifier.holdToOpen(onHold = onHeadingHold) else Modifier
+                )
                 Spacer(Modifier.height(20.dp))
                 Text(body, fontSize = 17.sp, color = Navy.copy(alpha = 0.78f), textAlign = TextAlign.Center)
                 if (footnote != null) {
@@ -97,12 +92,6 @@ internal fun StatusScreen(
                 StatusAction(action, width = 340)
             }
         }
-        Text(
-            "PHASE 4.5 · PRODUCTION / ERROR STATE",
-            fontSize = 13.sp,
-            color = Navy,
-            modifier = Modifier.align(Alignment.BottomStart).padding(32.dp)
-        )
     }
 }
 

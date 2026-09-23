@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kiosk device owner: no extra admin policies, only lock task and app management. -->
+<device-admin>
+    <uses-policies />
+</device-admin>

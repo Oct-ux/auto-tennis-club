@@ -55,6 +55,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // The customer switches ES / CAT / EN at runtime, so every language must ship in the APK.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
 }
 
 dependencies {

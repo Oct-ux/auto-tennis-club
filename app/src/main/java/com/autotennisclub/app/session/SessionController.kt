@@ -13,6 +13,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -31,7 +33,10 @@ class SessionController(
     private val recoveryStepMillis: Long = 500,
     private val saveEverySeconds: Long = 10,
     /** A session interrupted longer than this is not resumed: the customer has probably left. */
-    private val maxResumeGapMillis: Long = 10 * 60_000L
+    private val maxResumeGapMillis: Long = 10 * 60_000L,
+    /** Back to Home after this long without a touch on selection and payment screens. */
+    private val inactivityMillis: Long = 60_000L,
+    private val completeScreenMillis: Long = 30_000L
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.StartingUp)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -45,8 +50,17 @@ class SessionController(
 
     private var sessionJob: Job? = null
     private var paymentJob: Job? = null
+    private val touches = MutableStateFlow(0L)
 
     init {
+        scope.launch {
+            combine(_state, touches) { current, _ -> current }.collectLatest { current ->
+                val timeout = idleTimeoutFor(current) ?: return@collectLatest
+                delay(timeout)
+                reset()
+            }
+        }
+
         scope.launch {
             machine.state.collect(::onMachineState)
         }
@@ -230,6 +244,23 @@ class SessionController(
     fun dispose() {
         cancelJobs()
         timer.stop()
+    }
+
+    /** Any touch on the screen; restarts the inactivity countdown. */
+    fun userActivity() {
+        touches.update { it + 1 }
+    }
+
+    /** Screens a customer can walk away from. Never while paying or playing. */
+    private fun idleTimeoutFor(state: SessionState): Long? = when (state) {
+        SessionState.TrainingSelection,
+        is SessionState.DurationSelection,
+        is SessionState.CustomConfigState,
+        is SessionState.Summary -> inactivityMillis
+        is SessionState.Payment ->
+            if (state.status == PaymentState.WAITING || state.status.canRetry) inactivityMillis else null
+        is SessionState.Complete -> completeScreenMillis
+        else -> null
     }
 
     // --- Maintenance (operator layer) ---

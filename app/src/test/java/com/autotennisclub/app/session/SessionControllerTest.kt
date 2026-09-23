@@ -334,6 +334,51 @@ class SessionControllerTest {
         assertEquals(listOf("SESSION_EXPIRED"), station.errorCodes)
     }
 
+    // --- Return to Home on inactivity ---
+
+    @Test fun abandonedSelectionReturnsHomeAfterOneMinute() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        station.session.start()
+        advanceTimeBy(59_000)
+        assertEquals(SessionState.TrainingSelection, station.state)
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun touchesKeepTheCustomerOnTheirScreen() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        station.session.start()
+        advanceTimeBy(50_000)
+        station.session.userActivity()
+        advanceTimeBy(50_000)
+        assertEquals(SessionState.TrainingSelection, station.state)
+        advanceTimeBy(11_000)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun abandonedPaymentScreenReturnsHome() = runTest {
+        val station = atPayment()
+        advanceTimeBy(61_000)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun completeScreenReturnsHomeAfterThirtySeconds() = runTest {
+        val station = runningSession()
+        station.session.stopSession()
+        advanceTimeBy(29_000)
+        assertTrue(station.state is SessionState.Complete)
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun playingSessionNeverTimesOut() = runTest {
+        val station = runningSession()
+        advanceTimeBy(5 * 60_000L)
+        assertTrue(station.state is SessionState.Running)
+    }
+
     // --- Maintenance ---
 
     @Test fun maintenanceIsRefusedWhileAPaidSessionPlays() = runTest {

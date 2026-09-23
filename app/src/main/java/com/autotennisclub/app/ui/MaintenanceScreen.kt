@@ -30,12 +30,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.autotennisclub.app.kiosk.KioskStatus
 import com.autotennisclub.app.machine.MachineState
 import com.autotennisclub.app.pusun.PusunBleConfig
 import com.autotennisclub.app.session.MachineTest
 import com.autotennisclub.app.session.PaymentState
 import com.autotennisclub.app.session.SessionState
 import com.autotennisclub.app.session.formatSeconds
+import com.autotennisclub.app.station.DeviceStatus
 import com.autotennisclub.app.station.StationState
 import com.autotennisclub.app.ui.theme.BorderGray
 import com.autotennisclub.app.ui.theme.Green
@@ -52,6 +54,8 @@ data class MaintenanceActions(
     val onReconnect: () -> Unit = {},
     val onTestPayment: () -> Unit = {},
     val onEndSession: () -> Unit = {},
+    /** Leaves kiosk mode and opens Android settings; the app locks again when reopened. */
+    val onAndroidSettings: () -> Unit = {},
     val onMachineTest: (MachineTest) -> Unit = {},
     /** Only with the simulated machine. */
     val onSimulateFault: (() -> Unit)? = null
@@ -81,9 +85,9 @@ internal fun MaintenanceScreen(station: StationState, actions: MaintenanceAction
             val diagnostics = station.sessionDiagnostics
             InfoCard(
                 "STATION STATUS",
-                "Tablet" to "ONLINE",
-                "Network" to if (station.online) "ONLINE" else "OFFLINE",
-                "Bluetooth" to if (station.bluetoothOn) "ON" else "OFF",
+                "Kiosk" to kioskLabel(station.device.kiosk),
+                "Network" to if (station.device.online) "ONLINE" else "OFFLINE",
+                "Bluetooth" to bluetoothLabel(station.device),
                 "Machine" to machineLabel(station.machine),
                 "Payment" to readyLabel(diagnostics.paymentReady)
             )
@@ -160,6 +164,7 @@ internal fun MaintenanceScreen(station: StationState, actions: MaintenanceAction
                         enabled = station.activeSession != null,
                         onClick = actions.onEndSession
                     )
+                    OperatorButton("ANDROID SETTINGS", Modifier.weight(1f), onClick = actions.onAndroidSettings)
                 }
             }
         }
@@ -227,6 +232,18 @@ private fun machineLabel(state: MachineState): String = when (state) {
     MachineState.ConnectionFailed -> "CONNECTION FAILED"
     MachineState.OutOfBalls -> "NO BALLS"
     is MachineState.Fault -> "FAULT ${state.code}"
+}
+
+private fun kioskLabel(status: KioskStatus): String = when (status) {
+    KioskStatus.LOCKED -> "LOCKED"
+    KioskStatus.UNLOCKED -> "UNLOCKED"
+    KioskStatus.NOT_SET_UP -> "NOT SET UP"
+}
+
+private fun bluetoothLabel(device: DeviceStatus): String = when {
+    !device.bluetoothPermission -> "NO PERMISSION"
+    device.bluetoothOn -> "ON"
+    else -> "OFF"
 }
 
 private fun readyLabel(ready: Boolean?): String = when (ready) {
