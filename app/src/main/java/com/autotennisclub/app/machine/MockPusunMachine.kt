@@ -77,10 +77,25 @@ class MockPusunMachine(
         val message = when (code) {
             1 -> "WHEEL_PROTECTION"
             2 -> "ENTRANCE_PROTECTION"
-            3 -> "NO_BALLS"
+            3 -> {
+                _state.value = MachineState.OutOfBalls
+                return
+            }
             else -> "UNKNOWN"
         }
         _state.value = MachineState.Fault(code, message)
+    }
+
+    fun simulateConnectionLost(attempt: Int = 1) {
+        _state.value = MachineState.Reconnecting(attempt)
+    }
+
+    fun simulateReconnected() {
+        _state.value = MachineState.Ready
+    }
+
+    fun simulateConnectionFailed() {
+        _state.value = MachineState.ConnectionFailed
     }
 
     fun isUsingPusunWriteCharacteristic(): Boolean =

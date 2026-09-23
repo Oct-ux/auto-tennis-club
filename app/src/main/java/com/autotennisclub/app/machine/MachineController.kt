@@ -46,9 +46,17 @@ class MachineController(scope: CoroutineScope, gatt: BleGatt) : TennisMachine {
     fun onNotification(frame: ByteArray) {
         val notification = PusunNotificationParser.parse(frame)
         if (notification is PusunNotification.Fault) {
-            _state.value = MachineState.Fault(notification.code, notification.type.name)
+            _state.value = if (notification.type == FaultType.NO_BALLS) {
+                MachineState.OutOfBalls
+            } else {
+                MachineState.Fault(notification.code, notification.type.name)
+            }
         }
     }
+
+    fun reconnecting(attempt: Int) { _state.value = MachineState.Reconnecting(attempt) }
+
+    fun connectionFailed() { _state.value = MachineState.ConnectionFailed }
 
     fun disconnected() { _state.value = MachineState.Disconnected }
 }
