@@ -1,0 +1,111 @@
+<resources>
+    <!-- Home -->
+    <string name="home_tagline">JUEGA • MEJORA • DISFRUTA</string>
+    <string name="home_subtitle">Tu sesión de entrenamiento privada empieza aquí.</string>
+    <string name="start">EMPEZAR</string>
+    <string name="station_ready">ESTACIÓN LISTA</string>
+
+    <!-- Selection -->
+    <string name="choose_training">ELIGE TU ENTRENAMIENTO</string>
+    <string name="mode_basic">BÁSICO</string>
+    <string name="mode_training">ENTRENAMIENTO</string>
+    <string name="mode_custom">PERSONALIZADO</string>
+    <string name="continue_button">CONTINUAR</string>
+    <string name="choose_duration">ELIGE LA DURACIÓN</string>
+    <string name="minutes_short">%1$d MIN</string>
+
+    <!-- Custom configuration -->
+    <string name="custom_training">ENTRENAMIENTO PERSONALIZADO</string>
+    <string name="speed">VELOCIDAD</string>
+    <string name="frequency">FRECUENCIA</string>
+    <string name="spin">EFECTO</string>
+    <string name="spin_none">SIN EFECTO</string>
+    <string name="spin_topspin">LIFTADO</string>
+    <string name="spin_backspin">CORTADO</string>
+    <string name="sequence_mode">MODO DE SECUENCIA</string>
+    <string name="sequence_fixed">PUNTO FIJO</string>
+    <string name="sequence_rotate">ROTAR PUNTOS</string>
+    <string name="config_not_paid">El tiempo de configuración NO forma parte de tu sesión pagada.</string>
+    <string name="confirm">CONFIRMAR</string>
+
+    <!-- Summary -->
+    <string name="session_summary">RESUMEN DE LA SESIÓN</string>
+    <string name="custom_summary">RESUMEN PERSONALIZADO</string>
+    <string name="label_training">ENTRENAMIENTO</string>
+    <string name="label_duration">DURACIÓN</string>
+    <string name="label_price">PRECIO</string>
+    <string name="summary_config">%1$d km/h · %2$s</string>
+    <string name="proceed_to_payment">IR AL PAGO</string>
+
+    <!-- Payment -->
+    <string name="tap_card">ACERCA TU TARJETA O MÓVIL</string>
+    <string name="cancel_payment">CANCELAR PAGO</string>
+    <string name="processing_payment">PROCESANDO EL PAGO…</string>
+    <string name="payment_successful">PAGO REALIZADO</string>
+    <string name="preparing_training">Preparando tu entrenamiento…</string>
+    <string name="payment_not_completed">PAGO NO COMPLETADO</string>
+    <string name="try_again_sentence">Inténtalo de nuevo.</string>
+    <string name="try_again">REINTENTAR</string>
+
+    <!-- Session -->
+    <string name="connecting_machine">Conectando con la máquina…</string>
+    <string name="get_ready">PREPÁRATE</string>
+    <string name="starts_automatically">El entrenamiento empieza automáticamente</string>
+    <string name="training_session">SESIÓN DE ENTRENAMIENTO</string>
+    <string name="time_remaining">TIEMPO RESTANTE</string>
+    <string name="paused">EN PAUSA</string>
+    <string name="stop">PARAR</string>
+    <string name="machine_active">MÁQUINA ACTIVA</string>
+    <string name="session_complete">SESIÓN COMPLETADA</string>
+    <string name="great_training">¡Buen entrenamiento!</string>
+    <string name="finish">FINALIZAR</string>
+
+    <!-- Phase 4.5 states (Figma S01–S09) -->
+    <string name="s01_heading">Iniciando la estación…</string>
+    <string name="s01_body">Comprobando tablet, aplicación, red, Bluetooth, máquina y sistema de pago.</string>
+    <string name="s02_heading">Estación no disponible temporalmente</string>
+    <string name="s02_body">Esta estación no está disponible en este momento. Inténtalo más tarde.</string>
+    <string name="s03_heading">Error en la máquina</string>
+    <string name="s03_body">La máquina de entrenamiento ha detectado un error. Espera mientras revisamos la estación.</string>
+    <string name="s03_reference">Tiempo no usado registrado · Referencia %1$s</string>
+    <string name="staff_contact">Personal: %1$s</string>
+    <string name="s04_heading">Devuelve las pelotas a la máquina</string>
+    <string name="s04_body">Recoge las pelotas y devuélvelas a la máquina para continuar. Tu sesión está en pausa.</string>
+    <string name="s04_action">YA HE DEVUELTO LAS PELOTAS</string>
+    <string name="s05_heading">Reconectando con la máquina…</string>
+    <string name="s05_body">Tu sesión está en pausa mientras intentamos recuperar la conexión Bluetooth.</string>
+    <string name="s05_attempt">Intento %1$d</string>
+    <string name="s06_heading">El terminal de pago no ha respondido</string>
+    <string name="s06_body">No hemos recibido respuesta del terminal de pago. Inténtalo de nuevo.</string>
+    <string name="s07_heading">Pago cancelado</string>
+    <string name="s07_body">El pago se ha cancelado. No se ha completado ningún cobro.</string>
+    <string name="s08_heading">Espera un momento</string>
+    <string name="s08_body">Estamos verificando tu pago. No vuelvas a pagar mientras se verifica.</string>
+    <string name="s09_heading">Recuperando la sesión</string>
+    <string name="s09_body">Estamos comprobando el pago, la máquina y el tiempo antes de continuar.</string>
+    <string name="recovery_payment">Pago</string>
+    <string name="recovery_machine">Máquina</string>
+    <string name="recovery_timer">Tiempo</string>
+
+    <!-- Navigation, cancel modal, custom configuration details -->
+    <string name="back">← VOLVER</string>
+    <string name="cancel_session">← CANCELAR SESIÓN</string>
+    <string name="cancel_title">¿Cancelar la sesión?</string>
+    <string name="cancel_body">Esta sesión ya está pagada y NO se reembolsará. ¿Seguro que quieres cancelarla?</string>
+    <string name="keep_playing">SEGUIR JUGANDO</string>
+    <string name="confirm_cancel">SÍ, CANCELAR (SIN REEMBOLSO)</string>
+    <string name="landing_zone">ZONA DE BOTE • toca para elegir</string>
+    <string name="zone_net_left">RED IZQUIERDA</string>
+    <string name="zone_net_right">RED DERECHA</string>
+    <string name="zone_back_left">FONDO IZQUIERDA</string>
+    <string name="zone_back_right">FONDO DERECHA</string>
+    <string name="speed_slow">Lenta</string>
+    <string name="speed_fast">Rápida</string>
+    <string name="frequency_detail">tiempo entre pelotas</string>
+    <string name="frequency_fast">Ritmo rápido</string>
+    <string name="frequency_relaxed">Tranquilo</string>
+    <string name="intensity">INTENSIDAD</string>
+    <string name="intensity_light">SUAVE</string>
+    <string name="intensity_medium">MEDIA</string>
+    <string name="intensity_heavy">FUERTE</string>
+</resources>

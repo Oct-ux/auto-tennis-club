@@ -1,0 +1,111 @@
+<resources>
+    <!-- Home -->
+    <string name="home_tagline">JUGA • MILLORA • GAUDEIX</string>
+    <string name="home_subtitle">La teva sessió d\'entrenament privada comença aquí.</string>
+    <string name="start">COMENÇAR</string>
+    <string name="station_ready">ESTACIÓ A PUNT</string>
+
+    <!-- Selection -->
+    <string name="choose_training">TRIA EL TEU ENTRENAMENT</string>
+    <string name="mode_basic">BÀSIC</string>
+    <string name="mode_training">ENTRENAMENT</string>
+    <string name="mode_custom">PERSONALITZAT</string>
+    <string name="continue_button">CONTINUAR</string>
+    <string name="choose_duration">TRIA LA DURADA</string>
+    <string name="minutes_short">%1$d MIN</string>
+
+    <!-- Custom configuration -->
+    <string name="custom_training">ENTRENAMENT PERSONALITZAT</string>
+    <string name="speed">VELOCITAT</string>
+    <string name="frequency">FREQÜÈNCIA</string>
+    <string name="spin">EFECTE</string>
+    <string name="spin_none">SENSE EFECTE</string>
+    <string name="spin_topspin">LIFTAT</string>
+    <string name="spin_backspin">TALLAT</string>
+    <string name="sequence_mode">MODE DE SEQÜÈNCIA</string>
+    <string name="sequence_fixed">PUNT FIX</string>
+    <string name="sequence_rotate">ROTAR PUNTS</string>
+    <string name="config_not_paid">El temps de configuració NO forma part de la teva sessió pagada.</string>
+    <string name="confirm">CONFIRMAR</string>
+
+    <!-- Summary -->
+    <string name="session_summary">RESUM DE LA SESSIÓ</string>
+    <string name="custom_summary">RESUM PERSONALITZAT</string>
+    <string name="label_training">ENTRENAMENT</string>
+    <string name="label_duration">DURADA</string>
+    <string name="label_price">PREU</string>
+    <string name="summary_config">%1$d km/h · %2$s</string>
+    <string name="proceed_to_payment">ANAR AL PAGAMENT</string>
+
+    <!-- Payment -->
+    <string name="tap_card">APROPA LA TARGETA O EL MÒBIL</string>
+    <string name="cancel_payment">CANCEL·LAR EL PAGAMENT</string>
+    <string name="processing_payment">PROCESSANT EL PAGAMENT…</string>
+    <string name="payment_successful">PAGAMENT FET</string>
+    <string name="preparing_training">Preparant el teu entrenament…</string>
+    <string name="payment_not_completed">PAGAMENT NO COMPLETAT</string>
+    <string name="try_again_sentence">Torna-ho a provar.</string>
+    <string name="try_again">TORNAR-HO A PROVAR</string>
+
+    <!-- Session -->
+    <string name="connecting_machine">Connectant amb la màquina…</string>
+    <string name="get_ready">PREPARA\'T</string>
+    <string name="starts_automatically">L\'entrenament comença automàticament</string>
+    <string name="training_session">SESSIÓ D\'ENTRENAMENT</string>
+    <string name="time_remaining">TEMPS RESTANT</string>
+    <string name="paused">EN PAUSA</string>
+    <string name="stop">ATURAR</string>
+    <string name="machine_active">MÀQUINA ACTIVA</string>
+    <string name="session_complete">SESSIÓ COMPLETADA</string>
+    <string name="great_training">Bon entrenament!</string>
+    <string name="finish">FINALITZAR</string>
+
+    <!-- Phase 4.5 states (Figma S01–S09) -->
+    <string name="s01_heading">Iniciant l\'estació…</string>
+    <string name="s01_body">Comprovant la tauleta, l\'aplicació, la xarxa, el Bluetooth, la màquina i el sistema de pagament.</string>
+    <string name="s02_heading">Estació no disponible temporalment</string>
+    <string name="s02_body">Aquesta estació no està disponible ara mateix. Torna-ho a provar més tard.</string>
+    <string name="s03_heading">Error a la màquina</string>
+    <string name="s03_body">La màquina d\'entrenament ha detectat un error. Espera mentre revisem l\'estació.</string>
+    <string name="s03_reference">Temps no utilitzat registrat · Referència %1$s</string>
+    <string name="staff_contact">Personal: %1$s</string>
+    <string name="s04_heading">Retorna les pilotes a la màquina</string>
+    <string name="s04_body">Recull les pilotes i retorna-les a la màquina per continuar. La teva sessió està en pausa.</string>
+    <string name="s04_action">JA HE RETORNAT LES PILOTES</string>
+    <string name="s05_heading">Reconnectant amb la màquina…</string>
+    <string name="s05_body">La teva sessió està en pausa mentre intentem recuperar la connexió Bluetooth.</string>
+    <string name="s05_attempt">Intent %1$d</string>
+    <string name="s06_heading">El terminal de pagament no ha respost</string>
+    <string name="s06_body">No hem rebut resposta del terminal de pagament. Torna-ho a provar.</string>
+    <string name="s07_heading">Pagament cancel·lat</string>
+    <string name="s07_body">El pagament s\'ha cancel·lat. No s\'ha completat cap cobrament.</string>
+    <string name="s08_heading">Espera un moment</string>
+    <string name="s08_body">Estem verificant el teu pagament. No tornis a pagar mentre es verifica.</string>
+    <string name="s09_heading">Recuperant la sessió</string>
+    <string name="s09_body">Estem comprovant el pagament, la màquina i el temps abans de continuar.</string>
+    <string name="recovery_payment">Pagament</string>
+    <string name="recovery_machine">Màquina</string>
+    <string name="recovery_timer">Temps</string>
+
+    <!-- Navigation, cancel modal, custom configuration details -->
+    <string name="back">← TORNAR</string>
+    <string name="cancel_session">← CANCEL·LAR SESSIÓ</string>
+    <string name="cancel_title">Vols cancel·lar la sessió?</string>
+    <string name="cancel_body">Aquesta sessió ja està pagada i NO es reemborsarà. Segur que la vols cancel·lar?</string>
+    <string name="keep_playing">CONTINUAR JUGANT</string>
+    <string name="confirm_cancel">SÍ, CANCEL·LAR (SENSE REEMBORSAMENT)</string>
+    <string name="landing_zone">ZONA DE BOT • toca per triar</string>
+    <string name="zone_net_left">XARXA ESQUERRA</string>
+    <string name="zone_net_right">XARXA DRETA</string>
+    <string name="zone_back_left">FONS ESQUERRA</string>
+    <string name="zone_back_right">FONS DRETA</string>
+    <string name="speed_slow">Lenta</string>
+    <string name="speed_fast">Ràpida</string>
+    <string name="frequency_detail">temps entre pilotes</string>
+    <string name="frequency_fast">Ritme ràpid</string>
+    <string name="frequency_relaxed">Tranquil</string>
+    <string name="intensity">INTENSITAT</string>
+    <string name="intensity_light">SUAU</string>
+    <string name="intensity_medium">MITJANA</string>
+    <string name="intensity_heavy">FORTA</string>
+</resources>
