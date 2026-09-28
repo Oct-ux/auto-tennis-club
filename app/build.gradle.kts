@@ -8,6 +8,12 @@ plugins {
 // Station settings live in local.properties (not committed):
 //   operator.pin=1234
 //   support.contact=+34 600 000 000
+// SumUp Solo (Cloud API). Sandbox keys drive the Virtual Solo, live keys a real Solo:
+//   sumup.apiKey=sup_sk_...
+//   sumup.merchantCode=M...
+//   sumup.affiliateKey=sup_afk_...
+//   sumup.affiliateAppId=com.autotennisclub.app
+//   sumup.readerId=rdr_...   (optional: normally paired from the operator panel)
 val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -42,6 +48,15 @@ android {
         }
         buildConfigField("String", "OPERATOR_PIN", "\"$operatorPin\"")
         buildConfigField("String", "SUPPORT_CONTACT", "\"${localProperties.getProperty("support.contact", "")}\"")
+        listOf("apiKey", "merchantCode", "affiliateKey", "readerId").forEach { key ->
+            val field = "SUMUP_" + key.replace(Regex("([A-Z])"), "_$1").uppercase()
+            buildConfigField("String", field, "\"${localProperties.getProperty("sumup.$key", "")}\"")
+        }
+        buildConfigField(
+            "String",
+            "SUMUP_AFFILIATE_APP_ID",
+            "\"${localProperties.getProperty("sumup.affiliateAppId", "com.autotennisclub.app")}\""
+        )
     }
 
     signingConfigs {
@@ -120,6 +135,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // org.json ships with Android; unit tests on the JVM need the real implementation.
+    testImplementation(libs.org.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

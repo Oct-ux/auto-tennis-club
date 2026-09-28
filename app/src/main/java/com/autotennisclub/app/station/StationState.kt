@@ -34,6 +34,8 @@ data class StationState(
     val machine: MachineState = MachineState.Disconnected,
     val machineDiagnostics: MachineDiagnostics = MachineDiagnostics(),
     val paymentProvider: String = "",
+    /** SumUp Solo paired with this station, if any. */
+    val paymentReader: String? = null,
     val sessionDiagnostics: SessionDiagnostics = SessionDiagnostics(),
     val activeSession: ActiveSession? = null,
     val device: DeviceStatus = DeviceStatus(),
@@ -48,7 +50,8 @@ fun stationState(
     machine: TennisMachine,
     paymentProvider: String,
     errors: ErrorLog,
-    device: Flow<DeviceStatus>
+    device: Flow<DeviceStatus>,
+    paymentReader: Flow<String?>
 ): StateFlow<StationState> {
     val core = combine(
         session.state,
@@ -66,7 +69,7 @@ fun stationState(
             activeSession = active
         )
     }
-    return combine(core, errors.entries, device) { station, entries, deviceStatus ->
-        station.copy(errors = entries, device = deviceStatus)
+    return combine(core, errors.entries, device, paymentReader) { station, entries, deviceStatus, reader ->
+        station.copy(errors = entries, device = deviceStatus, paymentReader = reader)
     }.stateIn(scope, SharingStarted.Eagerly, StationState(paymentProvider = paymentProvider))
 }

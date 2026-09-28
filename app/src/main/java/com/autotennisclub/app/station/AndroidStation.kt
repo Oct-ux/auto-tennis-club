@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import androidx.core.content.edit
 import com.autotennisclub.app.kiosk.Kiosk
 import com.autotennisclub.app.kiosk.bluetoothPermissions
+import com.autotennisclub.app.payment.ReaderRegistry
 import com.autotennisclub.app.session.ActiveSession
 import com.autotennisclub.app.session.CustomConfig
 import com.autotennisclub.app.session.ErrorEntry
@@ -18,6 +19,9 @@ import com.autotennisclub.app.session.SpinIntensity
 import com.autotennisclub.app.session.TrainingMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 
@@ -120,5 +124,17 @@ class PrefsErrorLogStore(context: Context) : ErrorLogStore {
                 .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') }
         }
         prefs.edit { putString("entries", text) }
+    }
+}
+
+/** The Solo paired from the operator panel; falls back to sumup.readerId from local.properties. */
+class PrefsReaderRegistry(context: Context, default: String?) : ReaderRegistry {
+    private val prefs = context.getSharedPreferences("sumup", Context.MODE_PRIVATE)
+    private val _readerId = MutableStateFlow(prefs.getString("readerId", null) ?: default?.takeIf { it.isNotBlank() })
+    override val readerId: StateFlow<String?> = _readerId.asStateFlow()
+
+    override fun save(readerId: String) {
+        prefs.edit(commit = true) { putString("readerId", readerId) }
+        _readerId.value = readerId
     }
 }

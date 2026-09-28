@@ -115,6 +115,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Currency
 
@@ -179,6 +180,7 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
     val session = station.session
     val state by station.state.collectAsState()
     var askPin by remember { mutableStateOf(false) }
+    var operatorNotice by remember { mutableStateOf<String?>(null) }
     // Saved so a customer who restarts mid-session (S09) keeps their language.
     val uiPrefs = remember { context.getSharedPreferences("ui", Context.MODE_PRIVATE) }
     var language by rememberSaveable {
@@ -244,7 +246,19 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
             onEndSession = session::endSavedSession,
             onAndroidSettings = onAndroidSettings,
             onMachineTest = session::runMachineTest,
-            onSimulateFault = station.simulatedMachine?.let { mock -> { mock.simulateFault(1) } }
+            onSimulateFault = station.simulatedMachine?.let { mock -> { mock.simulateFault(1) } },
+            onPairReader = station.sumUp?.let { sumUp ->
+                { code: String ->
+                    operatorNotice = "Pairing Solo…"
+                    station.scope.launch {
+                        operatorNotice = sumUp.pairReader(code, "Auto Tennis Club station").fold(
+                            onSuccess = { "Solo paired: $it" },
+                            onFailure = { "Pairing failed: ${it.message}" }
+                        )
+                        session.testPayment()
+                    }
+                }
+            }
         )
     }
 
@@ -265,7 +279,7 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
             ) {
                 val content = Modifier.fillMaxSize().padding(padding)
                 if (state.maintenance) {
-                    MaintenanceScreen(state, maintenanceActions, content)
+                    MaintenanceScreen(state, maintenanceActions, content, notice = operatorNotice)
                 } else {
                     SessionUi(state.session, actions, BuildConfig.SUPPORT_CONTACT, content, language)
                 }
@@ -1052,6 +1066,8 @@ private fun PaymentScreen(
             }
             PaymentState.PROCESSING -> {
                 Text(stringResource(R.string.processing_payment), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Navy)
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.pay_on_reader), style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
             }
             PaymentState.SUCCESS -> {
                 Text(stringResource(R.string.payment_successful), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = GreenDark)

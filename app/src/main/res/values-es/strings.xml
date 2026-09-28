@@ -38,7 +38,8 @@
     <string name="proceed_to_payment">IR AL PAGO</string>
 
     <!-- Payment -->
-    <string name="tap_card">ACERCA TU TARJETA O MÓVIL</string>
+    <string name="tap_card">PAGAR CON TARJETA O MÓVIL</string>
+    <string name="pay_on_reader">Acerca tu tarjeta o móvil al lector de tarjetas.</string>
     <string name="cancel_payment">CANCELAR PAGO</string>
     <string name="processing_payment">PROCESANDO EL PAGO…</string>
     <string name="payment_successful">PAGO REALIZADO</string>

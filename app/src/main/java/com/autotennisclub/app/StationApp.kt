@@ -10,15 +10,20 @@ import com.autotennisclub.app.machine.TennisMachine
 import com.autotennisclub.app.payment.MockPaymentGateway
 import com.autotennisclub.app.payment.NotConfiguredPaymentGateway
 import com.autotennisclub.app.payment.PaymentGateway
+import com.autotennisclub.app.payment.SumUpCloudPaymentGateway
+import com.autotennisclub.app.payment.SumUpConfig
+import com.autotennisclub.app.payment.UrlConnectionHttpClient
 import com.autotennisclub.app.session.ErrorLog
 import com.autotennisclub.app.session.SessionController
 import com.autotennisclub.app.station.PrefsErrorLogStore
+import com.autotennisclub.app.station.PrefsReaderRegistry
 import com.autotennisclub.app.station.PrefsSessionStore
 import com.autotennisclub.app.station.deviceStatusFlow
 import com.autotennisclub.app.station.stationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.flowOf
 
 class StationApp : Application() {
     /**
@@ -40,16 +45,34 @@ class Station(context: Context) {
 
     /** Demo builds simulate the MAX B and the card terminal; production talks to the real ones. */
     val simulatedMachine: MockPusunMachine? = if (BuildConfig.SIMULATED) MockPusunMachine(scope) else null
-    val simulatedPayments: MockPaymentGateway? = if (BuildConfig.SIMULATED) MockPaymentGateway() else null
+    val simulatedPayments: MockPaymentGateway? =
+        if (BuildConfig.SIMULATED && sumUpConfig() == null) MockPaymentGateway() else null
 
     val machine: TennisMachine = simulatedMachine ?: MachineController(
         scope,
         AndroidBleGatt(context, context.getSystemService(BluetoothManager::class.java)?.adapter)
     )
-    // TODO(phase 6): SumUpPaymentGateway.
-    val payments: PaymentGateway = simulatedPayments ?: NotConfiguredPaymentGateway
+
+    /** Present when local.properties has SumUp keys: sandbox keys for the Virtual Solo, live keys for a real Solo. */
+    val sumUp: SumUpCloudPaymentGateway? = sumUpConfig()?.let {
+        SumUpCloudPaymentGateway(it, UrlConnectionHttpClient(), PrefsReaderRegistry(context, BuildConfig.SUMUP_READER_ID))
+    }
+    val payments: PaymentGateway = sumUp ?: simulatedPayments ?: NotConfiguredPaymentGateway
 
     val errors = ErrorLog(PrefsErrorLogStore(context))
     val session = SessionController(scope, machine, payments, PrefsSessionStore(context), errors)
-    val state = stationState(scope, session, machine, payments.providerName, errors, context.deviceStatusFlow())
+    val state = stationState(
+        scope, session, machine, payments.providerName, errors, context.deviceStatusFlow(),
+        paymentReader = sumUp?.readerId ?: flowOf(null)
+    )
+}
+
+private fun sumUpConfig(): SumUpConfig? {
+    if (BuildConfig.SUMUP_API_KEY.isBlank() || BuildConfig.SUMUP_MERCHANT_CODE.isBlank()) return null
+    return SumUpConfig(
+        apiKey = BuildConfig.SUMUP_API_KEY,
+        merchantCode = BuildConfig.SUMUP_MERCHANT_CODE,
+        affiliateAppId = BuildConfig.SUMUP_AFFILIATE_APP_ID,
+        affiliateKey = BuildConfig.SUMUP_AFFILIATE_KEY
+    )
 }

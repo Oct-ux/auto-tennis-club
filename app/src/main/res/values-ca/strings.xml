@@ -38,7 +38,8 @@
     <string name="proceed_to_payment">ANAR AL PAGAMENT</string>
 
     <!-- Payment -->
-    <string name="tap_card">APROPA LA TARGETA O EL MÒBIL</string>
+    <string name="tap_card">PAGAR AMB TARGETA O MÒBIL</string>
+    <string name="pay_on_reader">Apropa la targeta o el mòbil al lector de targetes.</string>
     <string name="cancel_payment">CANCEL·LAR EL PAGAMENT</string>
     <string name="processing_payment">PROCESSANT EL PAGAMENT…</string>
     <string name="payment_successful">PAGAMENT FET</string>

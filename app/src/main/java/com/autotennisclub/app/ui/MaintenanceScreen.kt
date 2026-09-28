@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,9 +22,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.autotennisclub.app.kiosk.KioskStatus
 import com.autotennisclub.app.machine.MachineState
 import com.autotennisclub.app.pusun.PusunBleConfig
@@ -60,12 +67,30 @@ data class MaintenanceActions(
     val onAndroidSettings: () -> Unit = {},
     val onMachineTest: (MachineTest) -> Unit = {},
     /** Only with the simulated machine. */
-    val onSimulateFault: (() -> Unit)? = null
+    val onSimulateFault: (() -> Unit)? = null,
+    /** Only with SumUp configured: pairs the Solo showing this code. */
+    val onPairReader: ((String) -> Unit)? = null
 )
 
 /** Figma THIRD LAYER — MAINTENANCE MODE / OPERATOR. */
 @Composable
-internal fun MaintenanceScreen(station: StationState, actions: MaintenanceActions, modifier: Modifier) {
+internal fun MaintenanceScreen(
+    station: StationState,
+    actions: MaintenanceActions,
+    modifier: Modifier,
+    /** Result of the last operator action that runs in the background (e.g. pairing). */
+    notice: String? = null
+) {
+    var pairing by remember { mutableStateOf(false) }
+    if (pairing && actions.onPairReader != null) {
+        PairReaderDialog(
+            onDismiss = { pairing = false },
+            onPair = { code ->
+                pairing = false
+                actions.onPairReader.invoke(code)
+            }
+        )
+    }
     Column(
         modifier
             .fillMaxSize()
@@ -107,7 +132,8 @@ internal fun MaintenanceScreen(station: StationState, actions: MaintenanceAction
                 "Connection" to readyLabel(diagnostics.paymentReady),
                 "Last result" to (diagnostics.lastPayment?.name ?: "--"),
                 "Verification" to if ((station.session as? SessionState.Payment)?.status == PaymentState.VERIFYING) "IN PROGRESS" else "IDLE",
-                "Last ref" to (diagnostics.lastReference?.take(8)?.uppercase() ?: "--")
+                "Last ref" to (diagnostics.lastReference?.take(8)?.uppercase() ?: "--"),
+                "Reader" to readerLabel(station)
             )
             val active = station.activeSession
             InfoCard(
@@ -167,6 +193,16 @@ internal fun MaintenanceScreen(station: StationState, actions: MaintenanceAction
                         onClick = actions.onEndSession
                     )
                     OperatorButton("ANDROID SETTINGS", Modifier.weight(1f), onClick = actions.onAndroidSettings)
+                    OperatorButton(
+                        "PAIR SOLO",
+                        Modifier.weight(1f),
+                        enabled = actions.onPairReader != null,
+                        onClick = { pairing = true }
+                    )
+                }
+                if (notice != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(notice, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy)
                 }
             }
         }
@@ -246,6 +282,48 @@ private fun bluetoothLabel(device: DeviceStatus): String = when {
     !device.bluetoothPermission -> "NO PERMISSION"
     device.bluetoothOn -> "ON"
     else -> "OFF"
+}
+
+private fun readerLabel(station: StationState): String = when {
+    station.paymentProvider != "SUMUP SOLO" -> "--"
+    station.paymentReader == null -> "NOT PAIRED"
+    else -> station.paymentReader.take(12) + "…"
+}
+
+/** Solo: Connections → API → Connect shows an 8–9 character code valid for 5 minutes. */
+@Composable
+private fun PairReaderDialog(onDismiss: () -> Unit, onPair: (String) -> Unit) {
+    var code by remember { mutableStateOf("") }
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(Modifier.padding(28.dp).width(420.dp)) {
+                Text("PAIR SOLO", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Navy)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "On the Solo (or virtual-solo.sumup.com): Connections → API → Connect, then type the code shown.",
+                    fontSize = 14.sp,
+                    color = TextSecondary
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.filter(Char::isLetterOrDigit).take(9).uppercase() },
+                    label = { Text("Pairing code") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("CANCEL", color = Navy) }
+                    Button(
+                        onClick = { onPair(code) },
+                        enabled = code.length >= 8,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("PAIR") }
+                }
+            }
+        }
+    }
 }
 
 private fun readyLabel(ready: Boolean?): String = when (ready) {

@@ -40,7 +40,8 @@
     <string name="proceed_to_payment">PROCEED TO PAYMENT</string>
 
     <!-- Payment -->
-    <string name="tap_card">TAP YOUR CARD OR PHONE</string>
+    <string name="tap_card">PAY BY CARD OR PHONE</string>
+    <string name="pay_on_reader">Tap your card or phone on the card reader.</string>
     <string name="cancel_payment">CANCEL PAYMENT</string>
     <string name="processing_payment">PROCESSING PAYMENT…</string>
     <string name="payment_successful">PAYMENT SUCCESSFUL</string>
