@@ -45,7 +45,8 @@ class SumUpCloudPaymentGatewayTest {
     private fun ok(json: String) = { HttpResponse(200, json) }
     private fun created(json: String) = { HttpResponse(201, json) }
     private val notFound = { HttpResponse(404, """{"error_code":"NOT_FOUND"}""") }
-    private fun tx(status: String) = ok("""{"id":"tx_9","status":"$status","foreign_transaction_id":"ref-1"}""")
+    private fun tx(status: String, entryMode: String = "contactless") =
+        ok("""{"id":"tx_9","status":"$status","entry_mode":"$entryMode","foreign_transaction_id":"ref-1"}""")
     private val checkoutAccepted = created("""{"data":{"checkout_id":"co_1","client_transaction_id":"ctx_1"}}""")
 
     @Test fun checkoutCarriesAmountCurrencyAffiliateAndOurReference() = runTest {
@@ -82,6 +83,13 @@ class SumUpCloudPaymentGatewayTest {
 
         sumUp.on("GET", "/transactions", tx("CANCELLED"))
         assertEquals(PaymentResult.Cancelled, gateway.startPayment(690, "ref-2"))
+    }
+
+    /** Seen on the Virtual Solo: the cancel button leaves a FAILED transaction with no card read. */
+    @Test fun cancellingOnTheSoloIsACancelNotADecline() = runTest {
+        sumUp.on("POST", "/checkout", checkoutAccepted)
+        sumUp.on("GET", "/transactions", tx("FAILED", entryMode = "none"))
+        assertEquals(PaymentResult.Cancelled, gateway.startPayment(690, "ref-1"))
     }
 
     @Test fun customerWalksAwayThenTheSoloIsStoppedAndItTimesOut() = runTest {
@@ -134,6 +142,18 @@ class SumUpCloudPaymentGatewayTest {
 
         sumUp.on("GET", "/transactions", tx("PENDING"))
         assertEquals(PaymentLookup.Unreachable, gateway.lookup("ref-1"))
+    }
+
+    /** The station died while the Solo was asking for a card: it must not keep charging for a forgotten session. */
+    @Test fun lookupStopsASoloStillWaitingBeforeSayingNotPaid() = runTest {
+        sumUp.on("POST", "/terminate", ok("{}"))
+        sumUp.on("GET", "/transactions", notFound)
+        assertEquals(PaymentLookup.NotPaid, gateway.lookup("ref-1"))
+        assertTrue(sumUp.calls.any { it.url.endsWith("/readers/rdr_1/terminate") })
+
+        // The customer tapped just before the Solo was stopped.
+        sumUp.on("GET", "/transactions", notFound, tx("SUCCESSFUL"))
+        assertEquals(PaymentLookup.Paid("tx_9"), gateway.lookup("ref-1"))
     }
 
     @Test fun lookupWithoutNetworkIsUnreachableNotUnpaid() = runTest {

@@ -137,8 +137,15 @@ class SumUpCloudPaymentGateway(
         }
     }
 
-    override suspend fun lookup(reference: String): PaymentLookup =
-        when (val found = transaction("foreign_transaction_id", reference)) {
+    override suspend fun lookup(reference: String): PaymentLookup {
+        val first = transaction("foreign_transaction_id", reference)
+        // No transaction yet: the Solo may still be asking for the card of a checkout the station
+        // forgot when it died. Stop it before saying "not paid", then check for a last-second tap.
+        val found = if (first == Lookup.Missing) {
+            readers.readerId.value?.let { terminate(it) }
+            transaction("foreign_transaction_id", reference)
+        } else first
+        return when (found) {
             is Lookup.Found -> when (found.status) {
                 "SUCCESSFUL" -> PaymentLookup.Paid(found.id)
                 "PENDING" -> PaymentLookup.Unreachable
@@ -147,6 +154,7 @@ class SumUpCloudPaymentGateway(
             Lookup.Missing -> PaymentLookup.NotPaid
             Lookup.Unreachable -> PaymentLookup.Unreachable
         }
+    }
 
     private suspend fun awaitResult(reference: String): PaymentResult {
         while (true) {
@@ -154,7 +162,8 @@ class SumUpCloudPaymentGateway(
             val found = transaction("foreign_transaction_id", reference) as? Lookup.Found ?: continue
             when (found.status) {
                 "SUCCESSFUL" -> return PaymentResult.Success(found.id)
-                "FAILED" -> return PaymentResult.Failed("DECLINED")
+                // Cancelling on the Solo is also FAILED, just without a card read (entry_mode "none").
+                "FAILED" -> return if (found.cardRead) PaymentResult.Failed("DECLINED") else PaymentResult.Cancelled
                 "CANCELLED" -> return PaymentResult.Cancelled
                 else -> Unit // PENDING: still on the Solo
             }
@@ -166,7 +175,9 @@ class SumUpCloudPaymentGateway(
     }
 
     private sealed interface Lookup {
-        data class Found(val id: String, val status: String) : Lookup
+        data class Found(val id: String, val status: String, val entryMode: String = "") : Lookup {
+            val cardRead get() = entryMode.isNotEmpty() && entryMode != "none"
+        }
         data object Missing : Lookup
         data object Unreachable : Lookup
     }
@@ -176,7 +187,8 @@ class SumUpCloudPaymentGateway(
         val response = call("GET", "/v2.1/merchants/${config.merchantCode}/transactions?$query")
             ?: return Lookup.Unreachable
         return when (response.code) {
-            200 -> parse(response.body)?.let { Lookup.Found(it.optString("id"), it.optString("status")) }
+            200 -> parse(response.body)
+                ?.let { Lookup.Found(it.optString("id"), it.optString("status"), it.optString("entry_mode")) }
                 ?: Lookup.Unreachable
             404 -> Lookup.Missing
             else -> Lookup.Unreachable
