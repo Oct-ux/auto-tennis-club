@@ -1,0 +1,24 @@
+name: Android CI
+
+on:
+  push:
+    branches:
+      - master
+      - "feature/**"
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - name: Run unit tests
+        run: ./gradlew test
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
