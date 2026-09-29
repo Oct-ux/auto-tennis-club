@@ -286,11 +286,12 @@ fun AutoTennisClubApp(onAndroidSettings: () -> Unit = {}, onRemoveKiosk: () -> U
                 if (BuildConfig.SIMULATED) {
                     // A demo build must never pass for a real station: it plays without charging.
                     Text(
-                        "DEMO · SIMULATED MACHINE AND PAYMENTS",
+                        if (station.sumUp != null) "DEMO · SIMULATED MACHINE · SUMUP PAYMENTS"
+                        else "DEMO · SIMULATED MACHINE AND PAYMENTS",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = ErrorRed,
-                        modifier = Modifier.align(Alignment.TopStart).padding(padding).padding(16.dp)
+                        modifier = Modifier.align(Alignment.TopCenter).padding(padding).padding(top = 4.dp)
                     )
                 }
                 if (BuildConfig.DEBUG) {

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -305,19 +308,27 @@ private fun PairReaderDialog(onDismiss: () -> Unit, onPair: (String) -> Unit) {
                     color = TextSecondary
                 )
                 Spacer(Modifier.height(16.dp))
+                // Rewriting the text while the keyboard composes it duplicates letters on Gboard:
+                // the keyboard capitalises, and the code is cleaned up only when submitted.
                 OutlinedTextField(
                     value = code,
-                    onValueChange = { code = it.filter(Char::isLetterOrDigit).take(9).uppercase() },
+                    onValueChange = { code = it },
                     label = { Text("Pairing code") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        autoCorrectEnabled = false,
+                        keyboardType = KeyboardType.Ascii
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("CANCEL", color = Navy) }
+                    val cleaned = code.filter(Char::isLetterOrDigit).uppercase()
                     Button(
-                        onClick = { onPair(code) },
-                        enabled = code.length >= 8,
+                        onClick = { onPair(cleaned) },
+                        enabled = cleaned.length in 8..9,
                         modifier = Modifier.weight(1f)
                     ) { Text("PAIR") }
                 }
