@@ -116,6 +116,37 @@ class SessionControllerTest {
         assertEquals(SessionState.Unavailable(UnavailableReason.OUT_OF_BALLS), station.state)
     }
 
+    @Test fun unavailableStationReopensOnItsOwnWhenTheTerminalIsBack() = runTest {
+        val payments = MockPaymentGateway().apply { setReady(false) }
+        val station = station(payments = payments)
+        advanceTimeBy(2_000)
+        assertEquals(SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE), station.state)
+
+        advanceTimeBy(35_000)
+        assertEquals(SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE), station.state)
+
+        payments.setReady(true)
+        advanceTimeBy(35_000)
+        assertEquals(SessionState.Idle, station.state)
+    }
+
+    @Test fun homeClosesWhenTheTerminalGoesAway() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        station.payments.setReady(false)
+        advanceTimeBy(60_000)
+        assertEquals(SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE), station.state)
+    }
+
+    @Test fun machineFaultWaitsForTheOperatorNotForTheRetry() = runTest {
+        val station = station()
+        advanceTimeBy(2_000)
+        station.machine.simulateFault(1)
+        runCurrent()
+        advanceTimeBy(65_000)
+        assertEquals(SessionState.Unavailable(UnavailableReason.MACHINE_FAULT), station.state)
+    }
+
     // --- Payment ---
 
     @Test fun paymentGoesThroughVerifyingAndChargesInCents() = runTest {
@@ -151,6 +182,17 @@ class SessionControllerTest {
         assertEquals(listOf("PAYMENT_TIMEOUT"), station.errorCodes)
         station.session.retryPayment()
         assertEquals(PaymentState.WAITING, station.paymentStatus)
+    }
+
+    /** Seen with the Solo offline: TRY AGAIN would fail forever, so the station closes instead. */
+    @Test fun failedPaymentOnATerminalThatIsGoneClosesTheStation() = runTest {
+        val station = atPayment()
+        station.payments.setNextOutcome(Outcome.FAILED)
+        station.payments.setReady(false)
+        station.session.pay()
+        advanceTimeBy(1_000)
+        assertEquals(SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE), station.state)
+        assertNull(station.store.load())
     }
 
     @Test fun cancelledOnTerminalIsRetryable() = runTest {

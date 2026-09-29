@@ -36,7 +36,11 @@ class SessionController(
     private val maxResumeGapMillis: Long = 10 * 60_000L,
     /** Back to Home after this long without a touch on selection and payment screens. */
     private val inactivityMillis: Long = 60_000L,
-    private val completeScreenMillis: Long = 30_000L
+    private val completeScreenMillis: Long = 30_000L,
+    /** S02 checks the station again on its own: nobody is there to press TRY AGAIN. */
+    private val unavailableRetryMillis: Long = 30_000L,
+    /** How often Home asks the payment terminal whether it is still there. */
+    private val idleCheckMillis: Long = 60_000L
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.StartingUp)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -58,6 +62,29 @@ class SessionController(
                 val timeout = idleTimeoutFor(current) ?: return@collectLatest
                 delay(timeout)
                 reset()
+            }
+        }
+
+        // Unattended station: it closes when the terminal goes away and reopens when it is back.
+        // A machine fault or no balls stay until the operator resets (connect() leaves them as they are).
+        scope.launch {
+            _state.collectLatest { current ->
+                when (current) {
+                    is SessionState.Unavailable -> {
+                        delay(unavailableRetryMillis)
+                        runSelfCheck()
+                    }
+                    SessionState.Idle -> while (true) {
+                        delay(idleCheckMillis)
+                        val paymentReady = payments.checkReady()
+                        _diagnostics.update { it.copy(paymentReady = paymentReady) }
+                        val reason = unavailableReason(paymentReady)
+                        if (reason != null && _state.value == SessionState.Idle) {
+                            _state.value = SessionState.Unavailable(reason)
+                        }
+                    }
+                    else -> Unit
+                }
             }
         }
 
@@ -219,6 +246,13 @@ class SessionController(
             }
             if (outcome != PaymentState.SUCCESS) persist(null)
             _diagnostics.update { it.copy(lastPayment = outcome) }
+            // TRY AGAIN on a terminal that is gone would fail every time: close the station
+            // instead; S02 reopens it once the terminal answers again.
+            if ((outcome == PaymentState.FAILED || outcome == PaymentState.TIMEOUT) && !payments.checkReady()) {
+                _diagnostics.update { it.copy(paymentReady = false) }
+                _state.value = SessionState.Unavailable(UnavailableReason.PAYMENT_OFFLINE)
+                return@launch
+            }
             setPaymentState(outcome)
         }
     }
